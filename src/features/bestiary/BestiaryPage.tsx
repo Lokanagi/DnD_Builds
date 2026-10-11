@@ -8,6 +8,7 @@ import {
   listBestiaryEntries,
   listSteinhartMonsters,
   removeBestiaryEntry,
+  saveCustomMonster,
   saveSrdCreatureToBestiary,
   saveSteinhartMonsterToBestiary,
   searchSrdCreatures,
@@ -120,12 +121,77 @@ function SteinhartSearch({ campaignId, onSaved }: { campaignId: string; onSaved:
   );
 }
 
+function CustomMonsterForm({ campaignId, onSaved }: { campaignId: string; onSaved: () => void }) {
+  const { user } = useAuth();
+  const [name, setName] = useState("");
+  const [cr, setCr] = useState("");
+  const [type, setType] = useState("");
+  const [summary, setSummary] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !name.trim()) return;
+    setBusy(true);
+    try {
+      await saveCustomMonster(campaignId, user.id, { name: name.trim(), challengeRating: cr, creatureType: type, summary });
+      setName("");
+      setCr("");
+      setType("");
+      setSummary("");
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-2 rounded border border-dashed border-slate-300 p-3 text-sm dark:border-slate-600">
+      <div className="flex gap-2">
+        <input
+          required
+          placeholder="Название"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="flex-1 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-800"
+        />
+        <input
+          placeholder="ОС"
+          value={cr}
+          onChange={(e) => setCr(e.target.value)}
+          className="w-16 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-800"
+        />
+        <input
+          placeholder="Тип"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className="w-28 rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-800"
+        />
+      </div>
+      <textarea
+        placeholder="Заметки / краткое описание (необязательно)"
+        value={summary}
+        onChange={(e) => setSummary(e.target.value)}
+        className="rounded border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+        rows={2}
+      />
+      <button
+        disabled={busy}
+        className="w-fit rounded bg-slate-800 px-3 py-1.5 text-xs text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900"
+      >
+        Добавить в библиотеку кампании
+      </button>
+    </form>
+  );
+}
+
 export function BestiaryPage() {
   const activeCampaignId = useCampaignStore((s) => s.activeCampaignId);
   const { role } = useActiveCampaign(activeCampaignId);
+  const { user } = useAuth();
   const isGm = role === "gm";
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<"library" | "srd" | "steinhart">("library");
+  const [tab, setTab] = useState<"library" | "srd" | "steinhart" | "custom">("library");
 
   const entriesQuery = useQuery({
     queryKey: ["bestiary", activeCampaignId],
@@ -136,47 +202,55 @@ export function BestiaryPage() {
   if (!activeCampaignId) return null;
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["bestiary", activeCampaignId] });
 
-  if (!isGm) {
-    return (
-      <div className="flex flex-col gap-4 p-4">
-        <h1 className="text-lg font-semibold">Бестиарий</h1>
-        <BestiaryList entries={entriesQuery.data ?? []} />
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-4 p-4">
       <h1 className="text-lg font-semibold">Бестиарий</h1>
       <div className="flex gap-2 text-sm">
-        {(["library", "srd", "steinhart"] as const).map((t) => (
+        {(["library", "srd", "steinhart", "custom"] as const).map((t) => (
           <button
             key={t}
             className={`rounded px-2 py-1 ${tab === t ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900" : "border border-slate-300 dark:border-slate-600"}`}
             onClick={() => setTab(t)}
           >
-            {t === "library" ? "Библиотека кампании" : t === "srd" ? "Поиск D&D" : "Монстры Штейнхарда"}
+            {t === "library" ? "Библиотека кампании" : t === "srd" ? "Поиск D&D" : t === "steinhart" ? "Монстры Штейнхарда" : "Создать своего"}
           </button>
         ))}
       </div>
 
-      {tab === "library" && <BestiaryList entries={entriesQuery.data ?? []} onRemove={(id) => removeBestiaryEntry(id).then(invalidate)} />}
+      {tab === "library" && (
+        <BestiaryList
+          entries={entriesQuery.data ?? []}
+          canDelete={(e) => isGm || e.savedBy === user?.id}
+          onRemove={(id) => removeBestiaryEntry(id).then(invalidate)}
+        />
+      )}
       {tab === "srd" && <SrdSearch campaignId={activeCampaignId} onSaved={invalidate} />}
       {tab === "steinhart" && <SteinhartSearch campaignId={activeCampaignId} onSaved={invalidate} />}
+      {tab === "custom" && <CustomMonsterForm campaignId={activeCampaignId} onSaved={invalidate} />}
     </div>
   );
 }
 
-function BestiaryList({ entries, onRemove }: { entries: BestiaryEntry[]; onRemove?: (id: string) => void }) {
-  if (entries.length === 0) return <p className="text-sm text-slate-400 dark:text-slate-500">Пока пусто — сохраните монстров из поиска.</p>;
+const SOURCE_LABEL: Record<BestiaryEntry["source"], string> = { srd: "D&D", steinhart: "Штейнхард", custom: "Своё" };
+
+function BestiaryList({
+  entries,
+  canDelete,
+  onRemove,
+}: {
+  entries: BestiaryEntry[];
+  canDelete?: (entry: BestiaryEntry) => boolean;
+  onRemove?: (id: string) => void;
+}) {
+  if (entries.length === 0) return <p className="text-sm text-slate-400 dark:text-slate-500">Пока пусто — сохраните монстров из поиска или добавьте своего.</p>;
   return (
     <div className="flex flex-col gap-1">
       {entries.map((e) => (
         <div key={e.id} className="flex items-center justify-between rounded border border-slate-100 px-2 py-1 text-sm dark:border-slate-800">
           <span>
-            {e.name} <span className="text-xs text-slate-400 dark:text-slate-500">{e.challengeRating ? `ОС ${e.challengeRating}` : ""} · {e.source === "srd" ? "D&D" : "Штейнхард"}</span>
+            {e.name} <span className="text-xs text-slate-400 dark:text-slate-500">{e.challengeRating ? `ОС ${e.challengeRating}` : ""} · {SOURCE_LABEL[e.source]}</span>
           </span>
-          {onRemove && (
+          {onRemove && canDelete?.(e) && (
             <button className="text-xs text-slate-400 hover:text-red-600 dark:hover:text-red-400" onClick={() => onRemove(e.id)}>
               Удалить
             </button>

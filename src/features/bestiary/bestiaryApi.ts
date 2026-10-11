@@ -65,6 +65,7 @@ export type BestiaryEntry = {
   name: string;
   challengeRating: string | null;
   data: unknown;
+  savedBy: string;
   createdAt: string;
 };
 
@@ -82,6 +83,7 @@ export async function listBestiaryEntries(campaignId: string): Promise<BestiaryE
     name: row.name,
     challengeRating: row.challenge_rating,
     data: row.data,
+    savedBy: row.saved_by,
     createdAt: row.created_at,
   }));
 }
@@ -107,6 +109,23 @@ export async function saveSteinhartMonsterToBestiary(campaignId: string, monster
     name: monster.name,
     challenge_rating: monster.challengeRating,
     data: monster,
+    saved_by: userId,
+  });
+  if (error) throw error;
+}
+
+export async function saveCustomMonster(
+  campaignId: string,
+  userId: string,
+  monster: { name: string; challengeRating: string; creatureType: string; summary: string },
+) {
+  const { error } = await supabase.from("bestiary_entries").insert({
+    campaign_id: campaignId,
+    source: "custom",
+    source_key: null,
+    name: monster.name,
+    challenge_rating: monster.challengeRating || null,
+    data: { creatureType: monster.creatureType, summary: monster.summary },
     saved_by: userId,
   });
   if (error) throw error;

@@ -270,7 +270,7 @@ export function CharacterDetail({
         </div>
       </div>
 
-      <CharacterItemsSection characterId={characterId} canEdit={canEdit} />
+      <CharacterItemsSection characterId={characterId} campaignId={campaignId} canEdit={canEdit} />
 
       <div>
         <h3 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Состояния</h3>

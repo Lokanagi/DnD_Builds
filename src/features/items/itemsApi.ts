@@ -46,6 +46,61 @@ export async function listSteinhartItems(): Promise<SteinhartItem[]> {
   }));
 }
 
+export type CampaignItem = {
+  id: string;
+  name: string;
+  category: string | null;
+  rarity: string | null;
+  description: string | null;
+  createdBy: string;
+};
+
+export async function listCampaignItems(campaignId: string): Promise<CampaignItem[]> {
+  const { data, error } = await supabase.from("campaign_items").select("*").eq("campaign_id", campaignId).order("name");
+  if (error) throw error;
+  return data.map((row) => ({
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    rarity: row.rarity,
+    description: row.description,
+    createdBy: row.created_by,
+  }));
+}
+
+export async function addCampaignItem(
+  campaignId: string,
+  userId: string,
+  item: { name: string; category: string; rarity: string; description: string },
+): Promise<CampaignItem> {
+  const { data, error } = await supabase
+    .from("campaign_items")
+    .insert({
+      campaign_id: campaignId,
+      name: item.name,
+      category: item.category || null,
+      rarity: item.rarity || null,
+      description: item.description || null,
+      created_by: userId,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    name: data.name,
+    category: data.category,
+    rarity: data.rarity,
+    description: data.description,
+    createdBy: data.created_by,
+  };
+}
+
+export async function removeCampaignItem(itemId: string) {
+  const { error } = await supabase.from("campaign_items").delete().eq("id", itemId);
+  if (error) throw error;
+}
+
 export type CharacterItem = {
   id: string;
   relation: "inventory" | "wishlist";

@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
-import type { CharacterResource, NormalizedCharacter } from "@/types/character";
+import type { CharacterResource, Coins, NormalizedCharacter } from "@/types/character";
 import { suggestStarterResources } from "./import/lssMapper";
 
 export type CharacterSummary = {
@@ -72,6 +72,28 @@ export async function listResources(characterId: string): Promise<(CharacterReso
   }));
 }
 
+export async function updateVitals(
+  characterId: string,
+  vitals: { hpCurrent?: number; hpMax?: number; hpTemp?: number },
+) {
+  const patch: Record<string, number> = {};
+  if (vitals.hpCurrent !== undefined) patch.hp_current = vitals.hpCurrent;
+  if (vitals.hpMax !== undefined) patch.hp_max = vitals.hpMax;
+  if (vitals.hpTemp !== undefined) patch.hp_temp = vitals.hpTemp;
+  const { error } = await supabase.from("characters").update(patch).eq("id", characterId);
+  if (error) throw error;
+}
+
+export async function updateCoins(characterId: string, coins: Coins) {
+  const { error } = await supabase.from("characters").update({ coins }).eq("id", characterId);
+  if (error) throw error;
+}
+
+export async function deleteCharacter(characterId: string) {
+  const { error } = await supabase.from("characters").delete().eq("id", characterId);
+  if (error) throw error;
+}
+
 export async function setResourceCurrent(resourceId: string, current: number) {
   const { error } = await supabase.from("character_resources").update({ current }).eq("id", resourceId);
   if (error) throw error;
@@ -124,6 +146,7 @@ export async function upsertCharacterFromImport(
     death_fails: character.deathFails,
     death_successes: character.deathSuccesses,
     inspiration: character.inspiration,
+    coins: character.coins,
     last_imported_at: new Date().toISOString(),
   };
 

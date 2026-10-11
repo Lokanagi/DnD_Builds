@@ -11,6 +11,7 @@ const tabs = [
   { to: "/madness", label: "Таймлайн безумия" },
   { to: "/moons", label: "Луны" },
   { to: "/xp", label: "Опыт" },
+  { to: "/bestiary", label: "Бестиарий" },
 ];
 
 export function Layout() {

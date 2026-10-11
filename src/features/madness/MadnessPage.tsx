@@ -6,6 +6,7 @@ import { advanceDay, setMadnessThresholds } from "@/features/campaigns/campaignA
 import type { MadnessThresholds } from "@/types/campaign";
 import { useAuth } from "@/features/auth/useAuth";
 import { listCharacterSummaries } from "@/features/characters/charactersApi";
+import { getMoonCatalog, getMoonState, listMoonHistory } from "@/features/moons/moonsApi";
 import {
   addMadnessEvent,
   computeEscalations,
@@ -287,8 +288,37 @@ export function MadnessPage() {
     queryFn: () => listMadnessEvents(activeCampaignId!),
     enabled: !!activeCampaignId,
   });
+  const moonCatalogQuery = useQuery({ queryKey: ["moon-catalog"], queryFn: getMoonCatalog });
+  const moonStateQuery = useQuery({
+    queryKey: ["moon-state", activeCampaignId],
+    queryFn: () => getMoonState(activeCampaignId!),
+    enabled: !!activeCampaignId,
+  });
+  const moonHistoryQuery = useQuery({
+    queryKey: ["moon-history", activeCampaignId],
+    queryFn: () => listMoonHistory(activeCampaignId!),
+    enabled: !!activeCampaignId,
+  });
 
   if (!activeCampaignId || !campaign) return null;
+
+  // 7.1: overlay which moon was active on which campaign day. Closed
+  // periods come from moon_history (started/ended); the currently active
+  // moon (if any) is still open-ended, so its band runs through today.
+  const moonPeriods = [
+    ...(moonHistoryQuery.data ?? [])
+      .filter((h) => h.startedDay !== null && h.endedDay !== null)
+      .map((h) => ({ name: h.moonName, startDay: h.startedDay as number, endDay: h.endedDay as number })),
+    ...(moonStateQuery.data?.currentMoonId && moonStateQuery.data.startedDay !== null
+      ? [
+          {
+            name: moonCatalogQuery.data?.find((m) => m.id === moonStateQuery.data!.currentMoonId)?.name ?? "?",
+            startDay: moonStateQuery.data.startedDay,
+            endDay: campaign.currentDay,
+          },
+        ]
+      : []),
+  ];
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["madness-events", activeCampaignId] });
@@ -382,6 +412,7 @@ export function MadnessPage() {
         characters={charactersQuery.data ?? []}
         events={events}
         currentDay={campaign.currentDay}
+        moonPeriods={moonPeriods}
         onEventClick={setSelectedEvent}
       />
 

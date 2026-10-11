@@ -1,10 +1,29 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getFullCharacter, listResources, setResourceCurrent, upsertCharacterFromImport } from "./charactersApi";
+import {
+  deleteCharacter,
+  getFullCharacter,
+  listResources,
+  setResourceCurrent,
+  updateCoins,
+  updateVitals,
+  upsertCharacterFromImport,
+} from "./charactersApi";
 import { addCondition, clearCondition, listConditions } from "./conditionsApi";
 import { parseLssJson } from "./import/lssMapper";
 import { tiptapToPlainText } from "./import/tiptapText";
 import { useAuth } from "@/features/auth/useAuth";
+import { useActiveCampaign } from "@/features/campaigns/useActiveCampaign";
+import { CharacterItemsSection } from "@/features/items/CharacterItemsSection";
+import type { Coins } from "@/types/character";
+
+const COIN_LABELS: { key: keyof Coins; label: string }[] = [
+  { key: "pp", label: "ПМ" },
+  { key: "gp", label: "ЗМ" },
+  { key: "ep", label: "ЭМ" },
+  { key: "sp", label: "СМ" },
+  { key: "cp", label: "ММ" },
+];
 
 function ResourceRow({ resource, onChange }: { resource: Awaited<ReturnType<typeof listResources>>[number]; onChange: (next: number) => void }) {
   return (
@@ -34,12 +53,22 @@ function ResourceRow({ resource, onChange }: { resource: Awaited<ReturnType<type
   );
 }
 
-export function CharacterDetail({ characterId, campaignId }: { characterId: string; campaignId: string }) {
+export function CharacterDetail({
+  characterId,
+  campaignId,
+  onDeleted,
+}: {
+  characterId: string;
+  campaignId: string;
+  onDeleted: () => void;
+}) {
   const { user } = useAuth();
+  const { role } = useActiveCampaign(campaignId);
   const queryClient = useQueryClient();
   const reimportRef = useRef<HTMLInputElement>(null);
   const [reimportError, setReimportError] = useState<string | null>(null);
   const [newCondition, setNewCondition] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const characterQuery = useQuery({
     queryKey: ["character", characterId],
@@ -57,6 +86,19 @@ export function CharacterDetail({ characterId, campaignId }: { characterId: stri
 
   const character = characterQuery.data;
   const isOwner = character?.owner_user_id === user?.id;
+  const isGm = role === "gm";
+  const canEdit = isOwner || isGm;
+  const invalidateCharacter = () => queryClient.invalidateQueries({ queryKey: ["character", characterId] });
+
+  const skills = (character?.skills as Record<string, number> | undefined) ?? {};
+  const passivePerception = 10 + (skills.perception ?? 0);
+  const coins = (character?.coins as Coins | undefined) ?? { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
+
+  const handleDelete = async () => {
+    await deleteCharacter(characterId);
+    await queryClient.invalidateQueries({ queryKey: ["characters", campaignId] });
+    onDeleted();
+  };
 
   const handleReimport = async (file: File) => {
     setReimportError(null);
@@ -89,45 +131,121 @@ export function CharacterDetail({ characterId, campaignId }: { characterId: stri
             {character.level_override ?? character.level_from_sheet}
           </p>
         </div>
-        {isOwner && (
-          <>
+        <div className="flex items-center gap-2">
+          {isOwner && (
+            <>
+              <button
+                className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
+                onClick={() => reimportRef.current?.click()}
+              >
+                Переимпортировать
+              </button>
+              <input
+                ref={reimportRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleReimport(file);
+                  e.target.value = "";
+                }}
+              />
+            </>
+          )}
+          {canEdit && !confirmingDelete && (
             <button
-              className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
-              onClick={() => reimportRef.current?.click()}
+              className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950"
+              onClick={() => setConfirmingDelete(true)}
             >
-              Переимпортировать
+              Удалить
             </button>
-            <input
-              ref={reimportRef}
-              type="file"
-              accept="application/json"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void handleReimport(file);
-                e.target.value = "";
-              }}
-            />
-          </>
-        )}
+          )}
+          {confirmingDelete && (
+            <div className="flex items-center gap-1 text-xs">
+              <span className="text-red-600 dark:text-red-400">Точно?</span>
+              <button className="rounded bg-red-700 px-2 py-1 text-white" onClick={handleDelete}>
+                Да
+              </button>
+              <button className="rounded border border-slate-300 px-2 py-1 dark:border-slate-600" onClick={() => setConfirmingDelete(false)}>
+                Нет
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       {reimportError && <p className="text-sm text-red-600 dark:text-red-400">{reimportError}</p>}
 
-      <div className="grid grid-cols-3 gap-3 text-sm">
+      <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <div className="rounded border border-slate-200 p-2 dark:border-slate-700">
           <p className="text-slate-400 dark:text-slate-500">HP</p>
-          <p>
-            {character.hp_current}/{character.hp_max}
-            {character.hp_temp ? ` (+${character.hp_temp})` : ""}
-          </p>
+          {canEdit ? (
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                defaultValue={character.hp_current}
+                key={`hp-current-${character.hp_current}`}
+                onBlur={(e) => updateVitals(characterId, { hpCurrent: Number(e.target.value) }).then(invalidateCharacter)}
+                className="w-12 rounded border border-slate-300 bg-white px-1 py-0.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+              />
+              <span>/</span>
+              <input
+                type="number"
+                defaultValue={character.hp_max}
+                key={`hp-max-${character.hp_max}`}
+                onBlur={(e) => updateVitals(characterId, { hpMax: Number(e.target.value) }).then(invalidateCharacter)}
+                className="w-12 rounded border border-slate-300 bg-white px-1 py-0.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+              />
+            </div>
+          ) : (
+            <p>
+              {character.hp_current}/{character.hp_max}
+            </p>
+          )}
+        </div>
+        <div className="rounded border border-slate-200 p-2 dark:border-slate-700">
+          <p className="text-slate-400 dark:text-slate-500">Врем. хиты</p>
+          {canEdit ? (
+            <input
+              type="number"
+              defaultValue={character.hp_temp}
+              key={`hp-temp-${character.hp_temp}`}
+              onBlur={(e) => updateVitals(characterId, { hpTemp: Number(e.target.value) }).then(invalidateCharacter)}
+              className="w-14 rounded border border-slate-300 bg-white px-1 py-0.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+            />
+          ) : (
+            <p>{character.hp_temp}</p>
+          )}
         </div>
         <div className="rounded border border-slate-200 p-2 dark:border-slate-700">
           <p className="text-slate-400 dark:text-slate-500">КД</p>
           <p>{character.ac}</p>
         </div>
         <div className="rounded border border-slate-200 p-2 dark:border-slate-700">
-          <p className="text-slate-400 dark:text-slate-500">Кость хитов</p>
-          <p>{character.hit_die}</p>
+          <p className="text-slate-400 dark:text-slate-500">Пас. восприятие</p>
+          <p>{passivePerception}</p>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Деньги</h3>
+        <div className="flex flex-wrap gap-3 text-sm">
+          {COIN_LABELS.map(({ key, label }) => (
+            <label key={key} className="flex items-center gap-1">
+              {label}
+              <input
+                type="number"
+                min={0}
+                defaultValue={coins[key]}
+                key={`${key}-${coins[key]}`}
+                disabled={!canEdit}
+                onBlur={(e) =>
+                  updateCoins(characterId, { ...coins, [key]: Number(e.target.value) }).then(invalidateCharacter)
+                }
+                className="w-16 rounded border border-slate-300 bg-white px-1 py-0.5 text-sm disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800"
+              />
+            </label>
+          ))}
         </div>
       </div>
 
@@ -151,6 +269,8 @@ export function CharacterDetail({ characterId, campaignId }: { characterId: stri
           )}
         </div>
       </div>
+
+      <CharacterItemsSection characterId={characterId} canEdit={canEdit} />
 
       <div>
         <h3 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Состояния</h3>

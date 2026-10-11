@@ -35,7 +35,7 @@ export function CharactersPage() {
         >
           ← Назад к списку
         </button>
-        <CharacterDetail characterId={selectedId} campaignId={activeCampaignId} />
+        <CharacterDetail characterId={selectedId} campaignId={activeCampaignId} onDeleted={() => setSelectedId(null)} />
       </div>
     );
   }

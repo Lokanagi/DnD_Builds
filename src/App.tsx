@@ -5,6 +5,7 @@ import { CharactersPage } from "@/features/characters/CharactersPage";
 import { MadnessPage } from "@/features/madness/MadnessPage";
 import { MoonsPage } from "@/features/moons/MoonsPage";
 import { XpPage } from "@/features/xp/XpPage";
+import { BestiaryPage } from "@/features/bestiary/BestiaryPage";
 
 export function App() {
   return (
@@ -16,6 +17,7 @@ export function App() {
           <Route path="/madness" element={<MadnessPage />} />
           <Route path="/moons" element={<MoonsPage />} />
           <Route path="/xp" element={<XpPage />} />
+          <Route path="/bestiary" element={<BestiaryPage />} />
         </Route>
       </Routes>
     </CampaignGate>

@@ -19,6 +19,14 @@ export type CharacterResource = {
   note?: string;
 };
 
+export type Coins = {
+  cp: number;
+  sp: number;
+  ep: number;
+  gp: number;
+  pp: number;
+};
+
 export type NormalizedCharacter = {
   name: string;
   charClass: string;
@@ -40,6 +48,7 @@ export type NormalizedCharacter = {
   deathFails: number;
   deathSuccesses: number;
   inspiration: boolean;
+  coins: Coins;
   importSource: "lss_json" | "pdf" | "manual";
   rawImport: unknown;
 };

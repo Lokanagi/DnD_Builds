@@ -4,19 +4,23 @@ import { useCampaignStore } from "@/stores/campaignStore";
 import { useActiveCampaign } from "@/features/campaigns/useActiveCampaign";
 import {
   adjustDuration,
+  generateMoonForecast,
   getMoonCatalog,
   getMoonState,
   listMoonHistory,
   setSummonCounter,
   triggerNextMoon,
+  type ForecastEvent,
 } from "./moonsApi";
 
 export function MoonsPage() {
   const activeCampaignId = useCampaignStore((s) => s.activeCampaignId);
-  const { role } = useActiveCampaign(activeCampaignId);
+  const { role, campaign } = useActiveCampaign(activeCampaignId);
   const isGm = role === "gm";
   const queryClient = useQueryClient();
   const [manualMoonId, setManualMoonId] = useState<string>("");
+  const [forecastDays, setForecastDays] = useState(30);
+  const [forecast, setForecast] = useState<{ events: ForecastEvent[]; note: string } | null>(null);
 
   const catalogQuery = useQuery({ queryKey: ["moon-catalog"], queryFn: getMoonCatalog });
   const stateQuery = useQuery({
@@ -48,6 +52,9 @@ export function MoonsPage() {
           <>
             <h2 className="text-base font-semibold">{currentMoon.name}</h2>
             {currentMoon.bookPage && <p className="text-xs text-slate-400 dark:text-slate-500">стр. {currentMoon.bookPage}</p>}
+            {currentMoon.description && (
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{currentMoon.description}</p>
+            )}
             <div className="mt-2 flex items-center gap-2">
               <span className="text-sm text-slate-600 dark:text-slate-300">Осталось ночей:</span>
               {isGm && (
@@ -79,7 +86,7 @@ export function MoonsPage() {
           <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Призвать следующую луну</h3>
           <button
             className="w-fit rounded bg-slate-800 px-3 py-1.5 text-sm text-white hover:bg-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
-            onClick={() => triggerNextMoon(activeCampaignId, "random_d100").then(invalidateAll)}
+            onClick={() => triggerNextMoon(activeCampaignId, "random_d100", campaign?.currentDay ?? 1).then(invalidateAll)}
           >
             Бросить d100 (случайный метод)
           </button>
@@ -99,7 +106,7 @@ export function MoonsPage() {
             <button
               disabled={!manualMoonId}
               className="rounded border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:hover:bg-slate-800"
-              onClick={() => triggerNextMoon(activeCampaignId, "manual", manualMoonId).then(invalidateAll)}
+              onClick={() => triggerNextMoon(activeCampaignId, "manual", campaign?.currentDay ?? 1, manualMoonId).then(invalidateAll)}
             >
               Назначить
             </button>
@@ -121,6 +128,54 @@ export function MoonsPage() {
               <span className="text-xs text-slate-400 dark:text-slate-500">влияет на частоту восхода — правило см. в книге, стр. 283</span>
             </div>
           </div>
+
+          <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-800">
+            <h4 className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              Генератор: сколько лун взойдёт за N дней (по счётчику призыва)
+            </h4>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={365}
+                value={forecastDays}
+                onChange={(e) => setForecastDays(Number(e.target.value))}
+                className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
+              />
+              <span className="text-xs text-slate-500 dark:text-slate-400">дней вперёд</span>
+              <button
+                className="rounded border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
+                onClick={() => {
+                  if (!catalogQuery.data || !stateQuery.data) return;
+                  setForecast(
+                    generateMoonForecast(
+                      stateQuery.data.summonCounter,
+                      campaign?.currentDay ?? 1,
+                      forecastDays,
+                      catalogQuery.data,
+                    ),
+                  );
+                }}
+              >
+                Сгенерировать
+              </button>
+            </div>
+            {forecast && (
+              <div className="mt-2 flex flex-col gap-1">
+                <p className="text-xs text-slate-400 dark:text-slate-500">{forecast.note}</p>
+                {forecast.events.length === 0 ? (
+                  <p className="text-xs text-slate-400 dark:text-slate-500">Событий не выпало.</p>
+                ) : (
+                  forecast.events.map((e, i) => (
+                    <div key={i} className="flex items-center justify-between rounded border border-slate-100 px-2 py-1 text-xs dark:border-slate-800">
+                      <span>{e.moon.name}</span>
+                      <span className="text-slate-400 dark:text-slate-500">день {e.day}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -132,7 +187,7 @@ export function MoonsPage() {
               <div key={h.id} className="flex items-center justify-between rounded border border-slate-100 px-2 py-1 text-sm dark:border-slate-800">
                 <span>{h.moonName}</span>
                 <span className="text-xs text-slate-400 dark:text-slate-500">
-                  {new Date(h.startedAt).toLocaleDateString("ru-RU")}
+                  день {h.startedDay}
                   {h.durationNights ? ` · ${h.durationNights} н.` : ""}
                 </span>
               </div>

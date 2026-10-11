@@ -44,6 +44,7 @@ type LssInner = {
   resources: Record<string, unknown>;
   conditions: unknown[];
   inspiration: boolean;
+  coins?: Partial<Record<"cp" | "sp" | "ep" | "gp" | "pp", LssValue<number>>>;
 };
 
 const abilityMod = (score: number): number => Math.floor((score - 10) / 2);
@@ -102,6 +103,13 @@ export function parseLssJson(rawFileText: string): NormalizedCharacter {
     deathFails: inner.vitality.deathFails,
     deathSuccesses: inner.vitality.deathSuccesses,
     inspiration: inner.inspiration,
+    coins: {
+      cp: inner.coins?.cp?.value ?? 0,
+      sp: inner.coins?.sp?.value ?? 0,
+      ep: inner.coins?.ep?.value ?? 0,
+      gp: inner.coins?.gp?.value ?? 0,
+      pp: inner.coins?.pp?.value ?? 0,
+    },
     importSource: "lss_json",
     rawImport: inner,
   };

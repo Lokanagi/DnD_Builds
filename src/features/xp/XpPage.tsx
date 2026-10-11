@@ -13,6 +13,7 @@ function AwardXpForm({ campaignId, onAwarded }: { campaignId: string; onAwarded:
   });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [amount, setAmount] = useState(0);
+  const [splitEvenly, setSplitEvenly] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -25,17 +26,20 @@ function AwardXpForm({ campaignId, onAwarded }: { campaignId: string; onAwarded:
     });
   };
 
+  const targets = selected.size > 0 ? [...selected] : (totalsQuery.data ?? []).map((c) => c.characterId);
+  const perCharacterShare = splitEvenly && targets.length > 0 ? Math.floor(amount / targets.length) : amount;
+  const splitRemainder = splitEvenly && targets.length > 0 ? amount - perCharacterShare * targets.length : 0;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || amount === 0) return;
-    const targets = selected.size > 0 ? [...selected] : (totalsQuery.data ?? []).map((c) => c.characterId);
-    if (targets.length === 0) return;
+    if (!user || amount === 0 || targets.length === 0) return;
     setBusy(true);
     try {
-      await awardXp(campaignId, targets, amount, reason, user.id);
+      await awardXp(campaignId, targets, perCharacterShare, reason, user.id);
       setAmount(0);
       setReason("");
       setSelected(new Set());
+      setSplitEvenly(false);
       onAwarded();
     } finally {
       setBusy(false);
@@ -58,10 +62,10 @@ function AwardXpForm({ campaignId, onAwarded }: { campaignId: string; onAwarded:
         <input
           type="number"
           required
-          placeholder="Количество"
+          placeholder={splitEvenly ? "Всего на группу" : "Количество каждому"}
           value={amount || ""}
           onChange={(e) => setAmount(Number(e.target.value))}
-          className="w-32 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
+          className="w-36 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
         />
         <input
           placeholder="Причина"
@@ -70,6 +74,16 @@ function AwardXpForm({ campaignId, onAwarded }: { campaignId: string; onAwarded:
           className="flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
         />
       </div>
+      <label className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300">
+        <input type="checkbox" checked={splitEvenly} onChange={(e) => setSplitEvenly(e.target.checked)} />
+        Разделить поровну на всех выбранных
+      </label>
+      {splitEvenly && amount > 0 && targets.length > 0 && (
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          По {perCharacterShare} XP на {targets.length} чел.
+          {splitRemainder > 0 ? ` (${splitRemainder} XP не разделится без остатка, не будет начислено)` : ""}
+        </p>
+      )}
       <button
         disabled={busy}
         className="w-fit rounded bg-slate-800 px-3 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"

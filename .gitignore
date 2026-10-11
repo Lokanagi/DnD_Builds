@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+src-tauri/target/
+src-tauri/gen/
+*.log
+tsconfig.tsbuildinfo
+
+# Copyrighted sourcebook / scanned character sheet — reference material only,
+# never meant to ship in the repo (size + copyright, not code).
+*.pdf

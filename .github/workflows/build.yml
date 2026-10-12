@@ -5,11 +5,18 @@ name: Build desktop app
 # two repository secrets set in GitHub (Settings -> Secrets and variables ->
 # Actions): VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY — the frontend bakes
 # these in at build time, there's no runtime config file to edit after.
+#
+# Every successful build also republishes the "latest" GitHub Release, so
+# there's one stable page (repo -> Releases) with the newest installers for
+# both platforms — no digging through Actions runs/branches.
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -54,3 +61,24 @@ jobs:
             src-tauri/target/**/bundle/**/*.msi
             src-tauri/target/**/bundle/**/*.exe
           if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: steinhart-*
+          path: bundles
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Последняя сборка"
+          body: "Автособрано из ${{ github.sha }}. Берите установщик под свою ОС: .msi/.exe — Windows, .dmg — macOS."
+          make_latest: true
+          files: |
+            bundles/**/*.dmg
+            bundles/**/*.msi
+            bundles/**/*.exe

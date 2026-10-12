@@ -4,6 +4,7 @@ import { useCampaignStore } from "@/stores/campaignStore";
 import { useActiveCampaign } from "@/features/campaigns/useActiveCampaign";
 import {
   adjustDuration,
+  describeSummonTier,
   generateMoonForecast,
   getMoonCatalog,
   getMoonState,
@@ -21,6 +22,7 @@ export function MoonsPage() {
   const [manualMoonId, setManualMoonId] = useState<string>("");
   const [forecastDays, setForecastDays] = useState(30);
   const [forecast, setForecast] = useState<{ events: ForecastEvent[]; note: string } | null>(null);
+  const [counterInput, setCounterInput] = useState<number | null>(null);
 
   const catalogQuery = useQuery({ queryKey: ["moon-catalog"], queryFn: getMoonCatalog });
   const stateQuery = useQuery({
@@ -121,12 +123,15 @@ export function MoonsPage() {
                 type="number"
                 min={0}
                 max={1000}
-                defaultValue={stateQuery.data?.summonCounter ?? 0}
+                value={counterInput ?? stateQuery.data?.summonCounter ?? 0}
                 className="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
-                onBlur={(e) => setSummonCounter(activeCampaignId, Number(e.target.value)).then(invalidateAll)}
+                onChange={(e) => setCounterInput(Number(e.target.value))}
+                onBlur={(e) => setSummonCounter(activeCampaignId, Number(e.target.value)).then(invalidateAll).then(() => setCounterInput(null))}
               />
-              <span className="text-xs text-slate-400 dark:text-slate-500">влияет на частоту восхода — правило см. в книге, стр. 283</span>
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {describeSummonTier(counterInput ?? stateQuery.data?.summonCounter ?? 0)}
+            </p>
           </div>
 
           <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-800">

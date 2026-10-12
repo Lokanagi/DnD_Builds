@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
+import { hasCyrillic, translateMonsterQuery } from "./monsterDictionary";
 
 export type SrdCreatureSummary = {
   key: string;
@@ -16,12 +17,35 @@ const OPEN5E_BASE = "https://api.open5e.com/v2";
  * aggregated from several sourcebooks/game systems — `source` in the result
  * shows which, since not everything returned is core 5e). Nothing here is
  * stored locally until the GM/player explicitly saves it. */
-export async function searchSrdCreatures(query: string): Promise<SrdCreatureSummary[]> {
-  if (!query.trim()) return [];
-  const res = await fetch(`${OPEN5E_BASE}/creatures/?name__icontains=${encodeURIComponent(query)}&limit=20`);
+async function fetchCreaturesByName(name: string): Promise<Array<Record<string, unknown>>> {
+  const res = await fetch(`${OPEN5E_BASE}/creatures/?name__icontains=${encodeURIComponent(name)}&limit=20`);
   if (!res.ok) throw new Error("Не удалось найти в open5e");
   const data = await res.json();
-  return (data.results as Array<Record<string, unknown>>).map((c) => ({
+  return data.results as Array<Record<string, unknown>>;
+}
+
+/** open5e only has English names — a Cyrillic query is translated through a
+ * built-in RU→EN dictionary of common monster terms before hitting the API. */
+export async function searchSrdCreatures(query: string): Promise<SrdCreatureSummary[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const terms = hasCyrillic(trimmed) ? translateMonsterQuery(trimmed) : [trimmed];
+  if (terms.length === 0) return [];
+
+  const resultLists = await Promise.all(terms.map(fetchCreaturesByName));
+  const seen = new Set<string>();
+  const merged: Array<Record<string, unknown>> = [];
+  for (const list of resultLists) {
+    for (const c of list) {
+      const key = c.key as string;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(c);
+    }
+  }
+
+  return merged.map((c) => ({
     key: c.key as string,
     name: c.name as string,
     challengeRating: c.challenge_rating != null ? String(c.challenge_rating) : null,

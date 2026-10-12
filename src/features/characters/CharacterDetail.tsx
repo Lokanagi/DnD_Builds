@@ -15,7 +15,12 @@ import { tiptapToPlainText } from "./import/tiptapText";
 import { useAuth } from "@/features/auth/useAuth";
 import { useActiveCampaign } from "@/features/campaigns/useActiveCampaign";
 import { CharacterItemsSection } from "@/features/items/CharacterItemsSection";
-import type { Coins } from "@/types/character";
+import { ABILITY_FULL_LABELS, SKILL_LABELS } from "@/lib/dndRu";
+import type { AbilityScores, Coins } from "@/types/character";
+
+const ABILITY_ORDER: (keyof AbilityScores)[] = ["str", "dex", "con", "int", "wis", "cha"];
+const abilityMod = (score: number) => Math.floor((score - 10) / 2);
+const fmtMod = (n: number) => (n >= 0 ? `+${n}` : String(n));
 
 const COIN_LABELS: { key: keyof Coins; label: string }[] = [
   { key: "pp", label: "ПМ" },
@@ -91,6 +96,8 @@ export function CharacterDetail({
   const invalidateCharacter = () => queryClient.invalidateQueries({ queryKey: ["character", characterId] });
 
   const skills = (character?.skills as Record<string, number> | undefined) ?? {};
+  const saves = (character?.saves as Record<string, number> | undefined) ?? {};
+  const stats = (character?.stats as AbilityScores | undefined) ?? null;
   const passivePerception = 10 + (skills.perception ?? 0);
   const coins = (character?.coins as Coins | undefined) ?? { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 };
 
@@ -225,7 +232,52 @@ export function CharacterDetail({
           <p className="text-slate-400 dark:text-slate-500">Пас. восприятие</p>
           <p>{passivePerception}</p>
         </div>
+        <div className="rounded border border-slate-200 p-2 dark:border-slate-700">
+          <p className="text-slate-400 dark:text-slate-500">Кость хитов</p>
+          <p>{character.hit_die || "—"}</p>
+        </div>
+        <div className="rounded border border-slate-200 p-2 dark:border-slate-700">
+          <p className="text-slate-400 dark:text-slate-500">Вдохновение</p>
+          <p>{character.inspiration ? "да" : "нет"}</p>
+        </div>
+        {character.is_dying && (
+          <div className="rounded border border-red-200 p-2 dark:border-red-900">
+            <p className="text-red-500 dark:text-red-400">При смерти</p>
+            <p>
+              успехи {character.death_successes}/3 · провалы {character.death_fails}/3
+            </p>
+          </div>
+        )}
       </div>
+
+      {stats && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Характеристики</h3>
+          <div className="grid grid-cols-3 gap-2 text-center text-sm sm:grid-cols-6">
+            {ABILITY_ORDER.map((k) => (
+              <div key={k} className="rounded border border-slate-200 p-2 dark:border-slate-700">
+                <p className="text-xs text-slate-400 dark:text-slate-500">{ABILITY_FULL_LABELS[k]}</p>
+                <p className="text-base font-semibold">{stats[k]}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {fmtMod(abilityMod(stats[k]))} / спас {fmtMod(saves[k] ?? abilityMod(stats[k]))}
+                </p>
+              </div>
+            ))}
+          </div>
+          {Object.keys(skills).length > 0 && (
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
+              {Object.entries(skills)
+                .sort(([a], [b]) => (SKILL_LABELS[a] ?? a).localeCompare(SKILL_LABELS[b] ?? b, "ru"))
+                .map(([key, value]) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className="text-slate-600 dark:text-slate-300">{SKILL_LABELS[key] ?? key}</span>
+                    <span className="text-slate-400 dark:text-slate-500">{fmtMod(value)}</span>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         <h3 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Деньги</h3>

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
+import { hasCyrillic, translateItemQuery } from "./itemDictionary";
 
 export type SrdItemSummary = {
   key: string;
@@ -11,17 +12,46 @@ export type SrdItemDetail = Record<string, unknown> & { key: string; name: strin
 
 const OPEN5E_BASE = "https://api.open5e.com/v2";
 
-export async function searchSrdMagicItems(query: string): Promise<SrdItemSummary[]> {
-  if (!query.trim()) return [];
-  const res = await fetch(`${OPEN5E_BASE}/magicitems/?name__icontains=${encodeURIComponent(query)}&limit=20`);
+async function fetchMagicItemsByName(name: string): Promise<Array<Record<string, unknown>>> {
+  const res = await fetch(`${OPEN5E_BASE}/magicitems/?name__icontains=${encodeURIComponent(name)}&limit=20`);
   if (!res.ok) throw new Error("Не удалось найти в open5e");
   const data = await res.json();
-  return (data.results as Array<Record<string, unknown>>).map((item) => ({
+  return data.results as Array<Record<string, unknown>>;
+}
+
+/** open5e only has English names — a Cyrillic query is translated through a
+ * built-in RU→EN dictionary of common item terms before hitting the API. */
+export async function searchSrdMagicItems(query: string): Promise<SrdItemSummary[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const terms = hasCyrillic(trimmed) ? translateItemQuery(trimmed) : [trimmed];
+  if (terms.length === 0) return [];
+
+  const resultLists = await Promise.all(terms.map(fetchMagicItemsByName));
+  const seen = new Set<string>();
+  const merged: Array<Record<string, unknown>> = [];
+  for (const list of resultLists) {
+    for (const item of list) {
+      const key = item.key as string;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+    }
+  }
+
+  return merged.map((item) => ({
     key: item.key as string,
     name: item.name as string,
     rarity: (item.rarity as { name?: string } | undefined)?.name ?? null,
     source: (item.document as { name?: string } | undefined)?.name ?? null,
   }));
+}
+
+export async function getSrdMagicItem(key: string): Promise<SrdItemDetail> {
+  const res = await fetch(`${OPEN5E_BASE}/magicitems/${encodeURIComponent(key)}/`);
+  if (!res.ok) throw new Error("Не удалось загрузить предмет");
+  return res.json();
 }
 
 export type SteinhartItem = {

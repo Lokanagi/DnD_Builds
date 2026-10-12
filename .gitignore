@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 src-tauri/target/
+src-tauri/target2/
 src-tauri/gen/
 *.log
 tsconfig.tsbuildinfo

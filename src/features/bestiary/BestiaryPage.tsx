@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCampaignStore } from "@/stores/campaignStore";
 import { useActiveCampaign } from "@/features/campaigns/useActiveCampaign";
 import { useAuth } from "@/features/auth/useAuth";
+import { MonsterStatblock } from "./MonsterStatblock";
 import {
   getSrdCreature,
   listBestiaryEntries,
@@ -13,6 +14,7 @@ import {
   saveSteinhartMonsterToBestiary,
   searchSrdCreatures,
   type BestiaryEntry,
+  type SrdCreatureDetail,
   type SrdCreatureSummary,
 } from "./bestiaryApi";
 
@@ -22,13 +24,20 @@ function SrdSearch({ campaignId, onSaved }: { campaignId: string; onSaved: () =>
   const [results, setResults] = useState<SrdCreatureSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [expandedDetail, setExpandedDetail] = useState<SrdCreatureDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      setResults(await searchSrdCreatures(query));
+      const found = await searchSrdCreatures(query);
+      setResults(found);
+      if (found.length === 0) {
+        setError("Ничего не нашлось — попробуйте другое слово (рус. частые термины понимаются, но покрывают не всё; английское название всегда сработает).");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка поиска");
     } finally {
@@ -36,9 +45,25 @@ function SrdSearch({ campaignId, onSaved }: { campaignId: string; onSaved: () =>
     }
   };
 
+  const handleExpand = async (summary: SrdCreatureSummary) => {
+    if (expandedKey === summary.key) {
+      setExpandedKey(null);
+      setExpandedDetail(null);
+      return;
+    }
+    setExpandedKey(summary.key);
+    setExpandedDetail(null);
+    setLoadingDetail(true);
+    try {
+      setExpandedDetail(await getSrdCreature(summary.key));
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
   const handleSave = async (summary: SrdCreatureSummary) => {
     if (!user) return;
-    const full = await getSrdCreature(summary.key);
+    const full = expandedKey === summary.key && expandedDetail ? expandedDetail : await getSrdCreature(summary.key);
     await saveSrdCreatureToBestiary(campaignId, full, user.id);
     onSaved();
   };
@@ -47,7 +72,7 @@ function SrdSearch({ campaignId, onSaved }: { campaignId: string; onSaved: () =>
     <div className="flex flex-col gap-2">
       <form onSubmit={handleSearch} className="flex gap-2">
         <input
-          placeholder="Поиск монстра (open5e, SRD и другие открытые источники)..."
+          placeholder="Поиск монстра (рус. или англ. название, open5e)..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
@@ -62,19 +87,22 @@ function SrdSearch({ campaignId, onSaved }: { campaignId: string; onSaved: () =>
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <div className="flex flex-col gap-1">
         {results.map((r) => (
-          <div key={r.key} className="flex items-center justify-between rounded border border-slate-100 px-2 py-1 text-sm dark:border-slate-800">
-            <span>
-              {r.name}{" "}
-              <span className="text-xs text-slate-400 dark:text-slate-500">
-                {r.challengeRating ? `ОС ${r.challengeRating}` : ""} {r.type ? `· ${r.type}` : ""} {r.source ? `· ${r.source}` : ""}
-              </span>
-            </span>
-            <button
-              className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
-              onClick={() => handleSave(r)}
-            >
-              Сохранить
-            </button>
+          <div key={r.key} className="flex flex-col gap-1">
+            <div className="flex items-center justify-between rounded border border-slate-100 px-2 py-1 text-sm dark:border-slate-800">
+              <button className="text-left hover:underline" onClick={() => handleExpand(r)}>
+                {r.name}{" "}
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  {r.challengeRating ? `ОС ${r.challengeRating}` : ""} {r.type ? `· ${r.type}` : ""} {r.source ? `· ${r.source}` : ""}
+                </span>
+              </button>
+              <button
+                className="rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
+                onClick={() => handleSave(r)}
+              >
+                Сохранить
+              </button>
+            </div>
+            {expandedKey === r.key && (loadingDetail ? <p className="text-xs text-slate-400">Загружаю...</p> : expandedDetail && <MonsterStatblock creature={expandedDetail} />)}
           </div>
         ))}
       </div>
@@ -242,19 +270,28 @@ function BestiaryList({
   canDelete?: (entry: BestiaryEntry) => boolean;
   onRemove?: (id: string) => void;
 }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   if (entries.length === 0) return <p className="text-sm text-slate-400 dark:text-slate-500">Пока пусто — сохраните монстров из поиска или добавьте своего.</p>;
   return (
     <div className="flex flex-col gap-1">
       {entries.map((e) => (
-        <div key={e.id} className="flex items-center justify-between rounded border border-slate-100 px-2 py-1 text-sm dark:border-slate-800">
-          <span>
-            {e.name} <span className="text-xs text-slate-400 dark:text-slate-500">{e.challengeRating ? `ОС ${e.challengeRating}` : ""} · {SOURCE_LABEL[e.source]}</span>
-          </span>
-          {onRemove && canDelete?.(e) && (
-            <button className="text-xs text-slate-400 hover:text-red-600 dark:hover:text-red-400" onClick={() => onRemove(e.id)}>
-              Удалить
+        <div key={e.id} className="flex flex-col gap-1">
+          <div className="flex items-center justify-between rounded border border-slate-100 px-2 py-1 text-sm dark:border-slate-800">
+            <button
+              className="text-left hover:underline disabled:cursor-default disabled:hover:no-underline"
+              disabled={e.source !== "srd"}
+              onClick={() => setExpandedId(expandedId === e.id ? null : e.id)}
+            >
+              {e.name} <span className="text-xs text-slate-400 dark:text-slate-500">{e.challengeRating ? `ОС ${e.challengeRating}` : ""} · {SOURCE_LABEL[e.source]}</span>
             </button>
-          )}
+            {onRemove && canDelete?.(e) && (
+              <button className="text-xs text-slate-400 hover:text-red-600 dark:hover:text-red-400" onClick={() => onRemove(e.id)}>
+                Удалить
+              </button>
+            )}
+          </div>
+          {expandedId === e.id && e.source === "srd" && <MonsterStatblock creature={e.data as SrdCreatureDetail} />}
         </div>
       ))}
     </div>

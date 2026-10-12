@@ -12,6 +12,7 @@ const tabs = [
   { to: "/moons", label: "Луны" },
   { to: "/xp", label: "Опыт" },
   { to: "/bestiary", label: "Бестиарий" },
+  { to: "/items", label: "Предметы" },
 ];
 
 export function Layout() {

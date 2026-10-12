@@ -157,7 +157,7 @@ type SummonTier =
   | { kind: "nightly_always" } // 900-999
   | { kind: "apocalypse" }; // 1000
 
-function summonTierFor(counter: number): SummonTier {
+export function summonTierFor(counter: number): SummonTier {
   if (counter <= 49) return { kind: "none" };
   if (counter <= 99) return { kind: "dormant_only", everyDays: 365 };
   if (counter <= 199) return { kind: "periodic", everyDays: 365, dice: 1, rerollBloodMoon: true };
@@ -170,6 +170,31 @@ function summonTierFor(counter: number): SummonTier {
   if (counter <= 899) return { kind: "nightly_chance", chanceNumerator: 1, chanceDenominator: 2 };
   if (counter <= 999) return { kind: "nightly_always" };
   return { kind: "apocalypse" };
+}
+
+/** Plain-language state of the current counter tier, shown live in the UI
+ * instead of pointing the GM at the book — this is the book's table (p.
+ * 283-284) already implemented as data in summonTierFor, just phrased out. */
+export function describeSummonTier(counter: number): string {
+  const tier = summonTierFor(counter);
+  const diceLabel = (n: DiceCount) => `${n}d4`;
+  switch (tier.kind) {
+    case "none":
+      return "Все Потусторонние луны исчезли — ни одна не взойдёт, пока счётчик не поднимется выше 49.";
+    case "dormant_only":
+      return "Восходит только Дремлющая Луна, примерно раз в год.";
+    case "periodic": {
+      const period = tier.everyDays === 365 ? "раз в год" : tier.everyDays === 30 ? "раз в месяц" : `каждые ${tier.everyDays} дн.`;
+      const reroll = tier.rerollBloodMoon ? " (Кровавая Луна Перерождения в этой группе переигрывается)" : "";
+      return `${period}: восходит ${diceLabel(tier.dice)} луны одновременно${reroll}.`;
+    }
+    case "nightly_chance":
+      return `Каждую ночь шанс ${tier.chanceNumerator}/${tier.chanceDenominator}, что взойдёт новая луна.`;
+    case "nightly_always":
+      return "Каждую ночь восходит новая луна.";
+    case "apocalypse":
+      return "Счётчик достиг 1000 — Луярна поглощается Великими. Особый сюжетный исход, не для авто-генерации.";
+  }
 }
 
 const rollD4 = () => 1 + Math.floor(Math.random() * 4);

@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCampaignStore } from "@/stores/campaignStore";
 import { useActiveCampaign } from "@/features/campaigns/useActiveCampaign";
 import { useAuth } from "@/features/auth/useAuth";
 import { ItemStatblock } from "./ItemStatblock";
+import { DndSuItemStatblock } from "./DndSuItemStatblock";
+import { fetchDndSuItem, type DndSuItem } from "@/lib/dndSu";
 import {
   addCampaignItem,
   getSrdMagicItem,
@@ -15,6 +17,25 @@ import {
   type SrdItemDetail,
   type SrdItemSummary,
 } from "./itemsApi";
+
+function ItemDetailView({ detail }: { detail: SrdItemDetail }) {
+  const [dndSu, setDndSu] = useState<DndSuItem | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDndSu(undefined);
+    fetchDndSuItem(detail.name)
+      .then((m) => !cancelled && setDndSu(m))
+      .catch(() => !cancelled && setDndSu(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [detail.name]);
+
+  if (dndSu === undefined) return <p className="text-xs text-slate-400">Загружаю...</p>;
+  if (dndSu) return <DndSuItemStatblock item={dndSu} />;
+  return <ItemStatblock item={detail} />;
+}
 
 function SrdItemSearch() {
   const [query, setQuery] = useState("");
@@ -89,7 +110,7 @@ function SrdItemSearch() {
                 </span>
               </span>
             </button>
-            {expandedKey === r.key && (loadingDetail ? <p className="text-xs text-slate-400">Загружаю...</p> : expandedDetail && <ItemStatblock item={expandedDetail} />)}
+            {expandedKey === r.key && (loadingDetail ? <p className="text-xs text-slate-400">Загружаю...</p> : expandedDetail && <ItemDetailView detail={expandedDetail} />)}
           </div>
         ))}
       </div>

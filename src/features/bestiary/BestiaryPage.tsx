@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCampaignStore } from "@/stores/campaignStore";
 import { useActiveCampaign } from "@/features/campaigns/useActiveCampaign";
 import { useAuth } from "@/features/auth/useAuth";
 import { MonsterStatblock } from "./MonsterStatblock";
+import { DndSuMonsterStatblock } from "./DndSuMonsterStatblock";
+import { fetchDndSuMonster, type DndSuMonster } from "@/lib/dndSu";
 import {
   getSrdCreature,
   listBestiaryEntries,
@@ -17,6 +19,25 @@ import {
   type SrdCreatureDetail,
   type SrdCreatureSummary,
 } from "./bestiaryApi";
+
+function MonsterDetailView({ detail }: { detail: SrdCreatureDetail }) {
+  const [dndSu, setDndSu] = useState<DndSuMonster | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDndSu(undefined);
+    fetchDndSuMonster(detail.name)
+      .then((m) => !cancelled && setDndSu(m))
+      .catch(() => !cancelled && setDndSu(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [detail.name]);
+
+  if (dndSu === undefined) return <p className="text-xs text-slate-400">Загружаю...</p>;
+  if (dndSu) return <DndSuMonsterStatblock monster={dndSu} />;
+  return <MonsterStatblock creature={detail} />;
+}
 
 function SrdSearch({ campaignId, onSaved }: { campaignId: string; onSaved: () => void }) {
   const { user } = useAuth();
@@ -102,7 +123,7 @@ function SrdSearch({ campaignId, onSaved }: { campaignId: string; onSaved: () =>
                 Сохранить
               </button>
             </div>
-            {expandedKey === r.key && (loadingDetail ? <p className="text-xs text-slate-400">Загружаю...</p> : expandedDetail && <MonsterStatblock creature={expandedDetail} />)}
+            {expandedKey === r.key && (loadingDetail ? <p className="text-xs text-slate-400">Загружаю...</p> : expandedDetail && <MonsterDetailView detail={expandedDetail} />)}
           </div>
         ))}
       </div>
@@ -291,7 +312,7 @@ function BestiaryList({
               </button>
             )}
           </div>
-          {expandedId === e.id && e.source === "srd" && <MonsterStatblock creature={e.data as SrdCreatureDetail} />}
+          {expandedId === e.id && e.source === "srd" && <MonsterDetailView detail={e.data as SrdCreatureDetail} />}
         </div>
       ))}
     </div>

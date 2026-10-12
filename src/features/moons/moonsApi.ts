@@ -151,22 +151,24 @@ type DiceCount = 1 | 2 | 3; // "1d4" / "2d4" / "3d4"
 
 type SummonTier =
   | { kind: "none" } // 0-49: all moons vanish
-  | { kind: "dormant_only"; everyDays: number } // 50-99: Dormant Moon, 1/year
-  | { kind: "periodic"; everyDays: number; dice: DiceCount; rerollBloodMoon?: boolean }
+  | { kind: "dormant_only" } // 50-99: Dormant Moon, 1/year
+  | { kind: "yearly_spread"; dice: DiceCount; rerollBloodMoon?: boolean } // 100-399: total Xd4/year, max 1/month, spread out
+  | { kind: "periodic"; everyDays: number; dice: DiceCount } // 400-699: simultaneous Xd4 every N days
+  | { kind: "periodic_restricted"; everyDays: number } // 700-799: every 4 days, no repeats until all risen
   | { kind: "nightly_chance"; chanceNumerator: number; chanceDenominator: number } // 800-899: 1d2, "1" rises
   | { kind: "nightly_always" } // 900-999
   | { kind: "apocalypse" }; // 1000
 
 export function summonTierFor(counter: number): SummonTier {
   if (counter <= 49) return { kind: "none" };
-  if (counter <= 99) return { kind: "dormant_only", everyDays: 365 };
-  if (counter <= 199) return { kind: "periodic", everyDays: 365, dice: 1, rerollBloodMoon: true };
-  if (counter <= 299) return { kind: "periodic", everyDays: 365, dice: 2 };
-  if (counter <= 399) return { kind: "periodic", everyDays: 365, dice: 3 };
+  if (counter <= 99) return { kind: "dormant_only" };
+  if (counter <= 199) return { kind: "yearly_spread", dice: 1, rerollBloodMoon: true };
+  if (counter <= 299) return { kind: "yearly_spread", dice: 2 };
+  if (counter <= 399) return { kind: "yearly_spread", dice: 3 };
   if (counter <= 499) return { kind: "periodic", everyDays: 30, dice: 1 };
   if (counter <= 599) return { kind: "periodic", everyDays: 14, dice: 1 };
   if (counter <= 699) return { kind: "periodic", everyDays: 7, dice: 1 };
-  if (counter <= 799) return { kind: "periodic", everyDays: 4, dice: 1 };
+  if (counter <= 799) return { kind: "periodic_restricted", everyDays: 4 };
   if (counter <= 899) return { kind: "nightly_chance", chanceNumerator: 1, chanceDenominator: 2 };
   if (counter <= 999) return { kind: "nightly_always" };
   return { kind: "apocalypse" };
@@ -177,23 +179,31 @@ export function summonTierFor(counter: number): SummonTier {
  * 283-284) already implemented as data in summonTierFor, just phrased out. */
 export function describeSummonTier(counter: number): string {
   const tier = summonTierFor(counter);
-  const diceLabel = (n: DiceCount) => `${n}d4`;
   switch (tier.kind) {
     case "none":
       return "Все Потусторонние луны исчезли — ни одна не взойдёт, пока счётчик не поднимется выше 49.";
     case "dormant_only":
-      return "Восходит только Дремлющая Луна, примерно раз в год.";
-    case "periodic": {
-      const period = tier.everyDays === 365 ? "раз в год" : tier.everyDays === 30 ? "раз в месяц" : `каждые ${tier.everyDays} дн.`;
-      const reroll = tier.rerollBloodMoon ? " (Кровавая Луна Перерождения в этой группе переигрывается)" : "";
-      return `${period}: восходит ${diceLabel(tier.dice)} луны одновременно${reroll}.`;
+      return "Восходит только Дремлющая Луна, примерно раз в год — на путешествия и существ не влияет.";
+    case "yearly_spread": {
+      const reroll = tier.rerollBloodMoon ? " Кровавая Луна Перерождения в этой группе переигрывается." : "";
+      const intellectNote =
+        tier.dice < 3
+          ? " Луны не влияют на путешествия и на существ с Интеллектом ниже 18 — для них это обычные спутники."
+          : " Луны влияют на путешествия и на всех существ, вне зависимости от Интеллекта.";
+      return `За год взойдёт ${tier.dice}d4 луны в сумме, не чаще 1 в месяц.${reroll}${intellectNote}`;
     }
+    case "periodic": {
+      const period = tier.everyDays === 30 ? "месяц" : `${tier.everyDays} ночей`;
+      return `Каждые ${period} одновременно восходит 1d4 луны.`;
+    }
+    case "periodic_restricted":
+      return "Жёлтая Корона затмевает небо каждый день. Каждые 4 дня восходит 1d4 луны — повторно та же луна не взойдёт, пока не пройдут все остальные (сброс — Кровавая Луна Перерождения).";
     case "nightly_chance":
-      return `Каждую ночь шанс ${tier.chanceNumerator}/${tier.chanceDenominator}, что взойдёт новая луна.`;
+      return `Жёлтая Корона в небе. Каждую ночь шанс ${tier.chanceNumerator}/${tier.chanceDenominator}, что взойдёт новая луна — без повторов, пока не пройдут все остальные.`;
     case "nightly_always":
-      return "Каждую ночь восходит новая луна.";
+      return "Жёлтая Корона в небе. Каждую ночь восходит новая луна — без повторов, пока не пройдут все остальные.";
     case "apocalypse":
-      return "Счётчик достиг 1000 — Луярна поглощается Великими. Особый сюжетный исход, не для авто-генерации.";
+      return "Счётчик достиг 1000 — Луярна поглощается Великими, которых она привлекла, и стирается из мира. Особый сюжетный исход, не для авто-генерации.";
   }
 }
 
@@ -245,37 +255,69 @@ export function generateMoonForecast(
 
   if (tier.kind === "dormant_only" && dormantMoon) {
     for (let day = startDay; day < startDay + daysAhead; day++) {
-      if ((day - startDay) % tier.everyDays === 0 && day !== startDay) {
+      if ((day - startDay) % 365 === 0 && day !== startDay) {
         events.push({ day, moon: dormantMoon });
       }
     }
     return { events, note: "Счётчик 50-99: Дремлющая луна восходит ~раз в год — на коротком окне событий может не быть, это нормально." };
   }
 
+  // 100-399: total of Xd4 moons rise over the year, spread out at no more
+  // than 1/month — not all at once (book, p. 283), so each year's quota is
+  // distributed across a random subset of that year's 12 months.
+  if (tier.kind === "yearly_spread") {
+    for (let yearStart = startDay; yearStart < startDay + daysAhead; yearStart += 365) {
+      const total = rollDice(tier.dice);
+      const months = Array.from({ length: 12 }, (_, i) => i);
+      for (let i = months.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [months[i], months[j]] = [months[j], months[i]];
+      }
+      const chosenMonths = months.slice(0, total).sort((a, b) => a - b);
+      for (const month of chosenMonths) {
+        const day = yearStart + month * 30 + 1;
+        if (day < startDay || day >= startDay + daysAhead) continue;
+        let moon = pickMoon(false);
+        if (tier.rerollBloodMoon && bloodMoon) {
+          let guard = 0;
+          while (moon.id === bloodMoon.id && guard++ < 20) moon = pickMoon(false);
+        }
+        events.push({ day, moon });
+      }
+    }
+    return { events, note: `За год — ${tier.dice}d4 луны в сумме, не чаще 1/месяц. На коротком окне событий может не быть, это нормально.` };
+  }
+
   if (tier.kind === "periodic") {
     for (let day = startDay; day < startDay + daysAhead; day++) {
       if ((day - startDay) % tier.everyDays !== 0) continue;
       const count = rollDice(tier.dice);
-      const monthUsed = new Set<string>(); // no repeats within the same trigger
+      const dayUsed = new Set<string>(); // no repeats within the same trigger
       for (let i = 0; i < count; i++) {
         let moon = pickMoon(false);
         let guard = 0;
-        while (monthUsed.has(moon.id) && guard++ < 20) moon = pickMoon(false);
-        if (tier.rerollBloodMoon && bloodMoon && moon.id === bloodMoon.id) {
-          guard = 0;
-          while (moon.id === bloodMoon.id && guard++ < 20) moon = pickMoon(false);
-        }
-        monthUsed.add(moon.id);
+        while (dayUsed.has(moon.id) && guard++ < 20) moon = pickMoon(false);
+        dayUsed.add(moon.id);
         events.push({ day, moon });
       }
     }
-    const periodLabel = tier.everyDays === 365 ? "в год" : tier.everyDays === 30 ? "в месяц" : `каждые ${tier.everyDays} дн.`;
-    return {
-      events,
-      note: tier.everyDays >= 30
-        ? `Частота ~раз ${periodLabel} — на коротком окне событий может не быть, это нормально.`
-        : `Срабатывает ${periodLabel}.`,
-    };
+    const periodLabel = tier.everyDays === 30 ? "месяц" : `${tier.everyDays} ночей`;
+    return { events, note: `Срабатывает каждые ${periodLabel}.` };
+  }
+
+  if (tier.kind === "periodic_restricted") {
+    for (let day = startDay; day < startDay + daysAhead; day++) {
+      if ((day - startDay) % tier.everyDays !== 0) continue;
+      const moon = pickMoon(true);
+      if (bloodMoon && moon.id === bloodMoon.id) {
+        cycleUsed = new Set();
+      } else {
+        cycleUsed.add(moon.id);
+        if (cycleUsed.size >= catalog.length) cycleUsed = new Set();
+      }
+      events.push({ day, moon });
+    }
+    return { events, note: "Жёлтая Корона: срабатывает каждые 4 дня, луна не повторится, пока не взойдут все остальные (сброс — Кровавая Луна Перерождения)." };
   }
 
   if (tier.kind === "nightly_chance" || tier.kind === "nightly_always") {

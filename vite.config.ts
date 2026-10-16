@@ -4,6 +4,9 @@ import path from "node:path";
 
 // Tauri needs a fixed port and ignores the dev server's own HMR overlay host checks.
 export default defineConfig({
+  // The Tauri app loads from its own root; the GitHub Pages deploy is served
+  // from a /<repo>/ subpath, so its CI build step sets GH_PAGES_BASE.
+  base: process.env.GH_PAGES_BASE || "/",
   plugins: [react()],
   resolve: {
     alias: {

@@ -8,7 +8,11 @@ name: Build desktop app
 #
 # Every successful build also republishes the "latest" GitHub Release, so
 # there's one stable page (repo -> Releases) with the newest installers for
-# both platforms — no digging through Actions runs/branches.
+# both platforms — no digging through Actions runs/branches. It also
+# deploys a plain browser build to GitHub Pages — same app, no install, no
+# Gatekeeper/SmartScreen prompts, usable by anyone with the Pages link, no
+# GitHub login needed. One-time setup for Pages to start working: repo ->
+# Settings -> Pages -> "Build and deployment" -> Source -> "GitHub Actions".
 
 on:
   push:
@@ -17,6 +21,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   build:
@@ -82,3 +88,37 @@ jobs:
             bundles/**/*.dmg
             bundles/**/*.msi
             bundles/**/*.exe
+
+  pages:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build web bundle
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          GH_PAGES_BASE: /${{ github.event.repository.name }}/
+        run: npx vite build
+
+      - name: SPA fallback for client-side routing
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

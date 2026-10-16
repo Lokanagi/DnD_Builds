@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/features/auth/useAuth";
+import { isSuperuserEmail } from "@/lib/superuser";
 import { getCampaign } from "./campaignApi";
 import type { Campaign, MemberRole } from "@/types/campaign";
 
@@ -31,9 +32,14 @@ export function useActiveCampaign(campaignId: string | null): ActiveCampaignInfo
           .select("role")
           .eq("campaign_id", campaignId!)
           .eq("user_id", user!.id)
-          .single(),
+          .maybeSingle(),
       ]);
-      return { campaign, role: (memberRes.data?.role as MemberRole | undefined) ?? null };
+      // The superuser account has RLS-level GM access everywhere (migration
+      // 0014) even without an actual campaign_members row — without this,
+      // the UI would still hide GM-only controls in campaigns they didn't
+      // personally join.
+      const role = (memberRes.data?.role as MemberRole | undefined) ?? (isSuperuserEmail(user!.email) ? "gm" : null);
+      return { campaign, role };
     },
     enabled: !!campaignId && !!user,
   });

@@ -2,11 +2,15 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/features/auth/useAuth";
 import { SignInPage } from "@/features/auth/SignInPage";
 import { useCampaignStore } from "@/stores/campaignStore";
-import { createCampaign, joinCampaign, listMyCampaigns } from "./campaignApi";
+import { isSuperuserEmail } from "@/lib/superuser";
+import { createCampaign, joinCampaign, listAllCampaigns, listMyCampaigns } from "./campaignApi";
 import type { Campaign } from "@/types/campaign";
 
 function CampaignPicker({ onPicked }: { onPicked: (campaign: Campaign) => void }) {
+  const { user } = useAuth();
+  const isSuperuser = isSuperuserEmail(user?.email);
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const [mode, setMode] = useState<"list" | "create" | "join">("list");
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -15,10 +19,11 @@ function CampaignPicker({ onPicked }: { onPicked: (campaign: Campaign) => void }
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listMyCampaigns()
+    setCampaigns(null);
+    (showAll ? listAllCampaigns() : listMyCampaigns())
       .then(setCampaigns)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, []);
+  }, [showAll]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +58,14 @@ function CampaignPicker({ onPicked }: { onPicked: (campaign: Campaign) => void }
       <div className="w-96 rounded-lg border border-slate-200 p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
         {mode === "list" && (
           <>
-            <h1 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">Твои кампании</h1>
+            <div className="mb-3 flex items-center justify-between">
+              <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{showAll ? "Все кампании" : "Твои кампании"}</h1>
+              {isSuperuser && (
+                <button className="text-xs text-slate-400 hover:underline dark:text-slate-500" onClick={() => setShowAll((v) => !v)}>
+                  {showAll ? "только твои" : "все кампании"}
+                </button>
+              )}
+            </div>
             {!campaigns ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">Загружаю...</p>
             ) : campaigns.length === 0 ? (

@@ -67,6 +67,14 @@ export async function listMyCampaigns(): Promise<Campaign[]> {
   return data.map(mapCampaign);
 }
 
+/** Superuser-only (RLS enforces it, migration 0014) — every campaign in the
+ * app, not just ones this account personally joined. */
+export async function listAllCampaigns(): Promise<Campaign[]> {
+  const { data, error } = await supabase.from("campaigns").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data.map(mapCampaign);
+}
+
 export async function getCampaign(campaignId: string): Promise<Campaign | null> {
   const { data, error } = await supabase.from("campaigns").select("*").eq("id", campaignId).maybeSingle();
   if (error) throw error;

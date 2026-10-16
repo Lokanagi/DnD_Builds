@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/features/auth/useAuth";
 import { isSuperuserEmail } from "@/lib/superuser";
+import { useViewModeStore } from "@/stores/viewModeStore";
 import { getCampaign } from "./campaignApi";
 import type { Campaign, MemberRole } from "@/types/campaign";
 
@@ -21,6 +22,7 @@ type ActiveCampaignInfo = {
  */
 export function useActiveCampaign(campaignId: string | null): ActiveCampaignInfo {
   const { user } = useAuth();
+  const previewAsPlayer = useViewModeStore((s) => s.previewAsPlayer);
 
   const query = useQuery({
     queryKey: ["campaign", campaignId, user?.id],
@@ -38,7 +40,9 @@ export function useActiveCampaign(campaignId: string | null): ActiveCampaignInfo
       // 0014), always — even in a campaign where it has an actual player
       // row (e.g. its own test character). Checking this first, not just
       // as a fallback for "no row", so an explicit 'player' row can't
-      // override it and hide GM-only controls.
+      // override it and hide GM-only controls. The "preview as player"
+      // toggle is applied after this, outside the query, so it flips
+      // instantly without a refetch.
       const role: MemberRole | null = isSuperuserEmail(user!.email)
         ? "gm"
         : ((memberRes.data?.role as MemberRole | undefined) ?? null);
@@ -47,9 +51,12 @@ export function useActiveCampaign(campaignId: string | null): ActiveCampaignInfo
     enabled: !!campaignId && !!user,
   });
 
+  const isSuperuser = isSuperuserEmail(user?.email);
+  const role = isSuperuser && previewAsPlayer ? "player" : (query.data?.role ?? null);
+
   return {
     campaign: query.data?.campaign ?? null,
-    role: query.data?.role ?? null,
+    role,
     loading: query.isLoading,
   };
 }

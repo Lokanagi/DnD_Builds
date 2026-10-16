@@ -5,6 +5,9 @@ import { useCampaignStore } from "@/stores/campaignStore";
 import { useActiveCampaign } from "@/features/campaigns/useActiveCampaign";
 import { useCampaignChannel } from "@/lib/realtime/campaignChannel";
 import { CampaignMenu } from "@/features/campaigns/CampaignMenu";
+import { useAuth } from "@/features/auth/useAuth";
+import { isSuperuserEmail } from "@/lib/superuser";
+import { useViewModeStore } from "@/stores/viewModeStore";
 
 const tabs = [
   { to: "/characters", label: "Персонажи" },
@@ -18,6 +21,10 @@ const tabs = [
 export function Layout() {
   const activeCampaignId = useCampaignStore((s) => s.activeCampaignId);
   const { campaign, role } = useActiveCampaign(activeCampaignId);
+  const { user } = useAuth();
+  const isSuperuser = isSuperuserEmail(user?.email);
+  const previewAsPlayer = useViewModeStore((s) => s.previewAsPlayer);
+  const togglePreviewAsPlayer = useViewModeStore((s) => s.togglePreviewAsPlayer);
   const queryClient = useQueryClient();
   useCampaignChannel(activeCampaignId ?? undefined, queryClient);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -32,6 +39,20 @@ export function Layout() {
           <h1 className="truncate text-sm font-semibold text-slate-700 dark:text-slate-200">{campaign?.name ?? "Steinhart"}</h1>
           {role && <span className="text-xs text-slate-400 dark:text-slate-500">{role === "gm" ? "Мастер" : "Игрок"}</span>}
         </button>
+
+        {isSuperuser && (
+          <button
+            className={`mb-1 rounded px-2 py-1 text-left text-xs ${
+              previewAsPlayer
+                ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                : "text-slate-400 hover:bg-slate-100 dark:text-slate-500 dark:hover:bg-slate-800"
+            }`}
+            onClick={togglePreviewAsPlayer}
+            title="Переключает только видимые элементы интерфейса — данные, скрытые от игроков (RLS), суперюзеру всё равно видны."
+          >
+            {previewAsPlayer ? "👁 Смотришь как игрок — вернуться к мастеру" : "Посмотреть как игрок"}
+          </button>
+        )}
 
         {menuOpen && <CampaignMenu campaign={campaign} role={role} onClose={() => setMenuOpen(false)} />}
 

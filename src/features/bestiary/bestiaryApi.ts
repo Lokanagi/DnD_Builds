@@ -60,7 +60,12 @@ export async function getSrdCreature(key: string): Promise<SrdCreatureDetail> {
   return res.json();
 }
 
-export type SteinhartAbility = { name: string; desc: string };
+export type SteinhartAbility = {
+  name: string;
+  desc: string;
+  toHit?: number | null;
+  damage?: { count: number; sides: number; bonus: number; type?: string | null }[];
+};
 
 export type SteinhartMonster = {
   id: string;

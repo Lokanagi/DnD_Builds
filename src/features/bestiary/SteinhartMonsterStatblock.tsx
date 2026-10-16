@@ -1,4 +1,5 @@
 import { ABILITY_LABELS } from "@/lib/dndRu";
+import { AttackRoller } from "./AttackRoller";
 import type { SteinhartAbility, SteinhartMonster } from "./bestiaryApi";
 
 function AbilityGroup({ title, items }: { title: string; items: SteinhartAbility[] | null }) {
@@ -10,6 +11,9 @@ function AbilityGroup({ title, items }: { title: string; items: SteinhartAbility
         {items.map((a, i) => (
           <p key={i} className="text-sm">
             <span className="font-semibold italic">{a.name}.</span> {a.desc}
+            {(a.toHit != null || (a.damage && a.damage.length > 0)) && (
+              <AttackRoller attack={{ toHit: a.toHit, damage: a.damage }} />
+            )}
           </p>
         ))}
       </div>

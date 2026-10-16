@@ -1,9 +1,44 @@
 import { ABILITY_LABELS, ACTION_TYPE_RU, CREATURE_TYPE_RU, SIZE_RU, translateAlignment } from "@/lib/dndRu";
+import { AttackRoller, type RollableAttack } from "./AttackRoller";
 import type { SrdCreatureDetail } from "./bestiaryApi";
 
-type Attack = { name?: string };
-type Action = { name: string; desc: string; action_type?: string; attacks?: Attack[] };
+type Open5eAttack = {
+  name?: string;
+  to_hit_mod?: number | null;
+  damage_die_count?: number | null;
+  damage_die_type?: string | null;
+  damage_bonus?: number | null;
+  damage_type?: { key?: string; name?: string } | null;
+  extra_damage_die_count?: number | null;
+  extra_damage_die_type?: string | null;
+  extra_damage_bonus?: number | null;
+  extra_damage_type?: { key?: string; name?: string } | null;
+};
+type Action = { name: string; desc: string; action_type?: string; attacks?: Open5eAttack[] };
 type NamedThing = { name: string; key?: string };
+
+const DIE_TYPE_SIDES: Record<string, number> = { D4: 4, D6: 6, D8: 8, D10: 10, D12: 12, D20: 20, D100: 100 };
+
+function toRollableAttack(a: Open5eAttack): RollableAttack {
+  const damage: RollableAttack["damage"] = [];
+  if (a.damage_die_count && a.damage_die_type && DIE_TYPE_SIDES[a.damage_die_type]) {
+    damage.push({
+      count: a.damage_die_count,
+      sides: DIE_TYPE_SIDES[a.damage_die_type],
+      bonus: a.damage_bonus ?? 0,
+      type: a.damage_type?.key ?? null,
+    });
+  }
+  if (a.extra_damage_die_count && a.extra_damage_die_type && DIE_TYPE_SIDES[a.extra_damage_die_type]) {
+    damage.push({
+      count: a.extra_damage_die_count,
+      sides: DIE_TYPE_SIDES[a.extra_damage_die_type],
+      bonus: a.extra_damage_bonus ?? 0,
+      type: a.extra_damage_type?.key ?? null,
+    });
+  }
+  return { toHit: a.to_hit_mod ?? null, damage };
+}
 
 function Row({ label, value }: { label: string; value: string }) {
   if (!value) return null;
@@ -24,6 +59,9 @@ function ActionGroup({ title, actions }: { title: string; actions: Action[] }) {
         {actions.map((a, i) => (
           <p key={i} className="text-sm">
             <span className="font-semibold italic">{a.name}.</span> {a.desc}
+            {a.attacks?.map((atk, j) => (
+              <AttackRoller key={j} attack={toRollableAttack(atk)} />
+            ))}
           </p>
         ))}
       </div>

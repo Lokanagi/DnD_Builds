@@ -35,10 +35,13 @@ export function useActiveCampaign(campaignId: string | null): ActiveCampaignInfo
           .maybeSingle(),
       ]);
       // The superuser account has RLS-level GM access everywhere (migration
-      // 0014) even without an actual campaign_members row — without this,
-      // the UI would still hide GM-only controls in campaigns they didn't
-      // personally join.
-      const role = (memberRes.data?.role as MemberRole | undefined) ?? (isSuperuserEmail(user!.email) ? "gm" : null);
+      // 0014), always — even in a campaign where it has an actual player
+      // row (e.g. its own test character). Checking this first, not just
+      // as a fallback for "no row", so an explicit 'player' row can't
+      // override it and hide GM-only controls.
+      const role: MemberRole | null = isSuperuserEmail(user!.email)
+        ? "gm"
+        : ((memberRes.data?.role as MemberRole | undefined) ?? null);
       return { campaign, role };
     },
     enabled: !!campaignId && !!user,

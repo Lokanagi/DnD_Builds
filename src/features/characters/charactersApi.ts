@@ -89,6 +89,16 @@ export async function updateCoins(characterId: string, coins: Coins) {
   if (error) throw error;
 }
 
+/** GM-only in practice (RLS: owner or GM can update a character) — fixes a
+ * character whose owner_user_id doesn't match the player it actually
+ * belongs to, e.g. when the GM imported the file on a player's behalf and
+ * ended up as the owner instead of them. `null` makes it NPC-style
+ * (unowned, GM-only). */
+export async function setCharacterOwner(characterId: string, ownerUserId: string | null) {
+  const { error } = await supabase.from("characters").update({ owner_user_id: ownerUserId }).eq("id", characterId);
+  if (error) throw error;
+}
+
 export async function deleteCharacter(characterId: string) {
   const { error } = await supabase.from("characters").delete().eq("id", characterId);
   if (error) throw error;

@@ -4,6 +4,7 @@ import {
   deleteCharacter,
   getFullCharacter,
   listResources,
+  setCharacterOwner,
   setResourceCurrent,
   updateCoins,
   updateVitals,
@@ -13,6 +14,7 @@ import { addCondition, clearCondition, listConditions } from "./conditionsApi";
 import { parseLssJson } from "./import/lssMapper";
 import { tiptapToPlainText } from "./import/tiptapText";
 import { useAuth } from "@/features/auth/useAuth";
+import { listCampaignMembers } from "@/features/campaigns/campaignApi";
 import { useActiveCampaign } from "@/features/campaigns/useActiveCampaign";
 import { CharacterItemsSection } from "@/features/items/CharacterItemsSection";
 import { ABILITY_FULL_LABELS, SKILL_LABELS } from "@/lib/dndRu";
@@ -92,6 +94,11 @@ export function CharacterDetail({
   const character = characterQuery.data;
   const isOwner = character?.owner_user_id === user?.id;
   const isGm = role === "gm";
+  const membersQuery = useQuery({
+    queryKey: ["campaign-members", campaignId],
+    queryFn: () => listCampaignMembers(campaignId),
+    enabled: isGm,
+  });
   const canEdit = isOwner || isGm;
   const invalidateCharacter = () => queryClient.invalidateQueries({ queryKey: ["character", characterId] });
 
@@ -122,7 +129,13 @@ export function CharacterDetail({
   };
 
   if (characterQuery.isLoading) return <p className="p-4 text-sm text-slate-500 dark:text-slate-400">Загружаю...</p>;
-  if (!character) return <p className="p-4 text-sm text-slate-500 dark:text-slate-400">Нет доступа к полному листу.</p>;
+  if (!character)
+    return (
+      <p className="p-4 text-sm text-slate-500 dark:text-slate-400">
+        Нет доступа к полному листу — попроси мастера проверить, на кого записан этот персонаж (экран персонажа → поле
+        "Владелец").
+      </p>
+    );
 
   const rawImport = character.raw_import as Record<string, unknown> | null;
   const text = rawImport?.text as Record<string, { value?: unknown }> | undefined;
@@ -139,7 +152,7 @@ export function CharacterDetail({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isOwner && (
+          {canEdit && (
             <>
               <button
                 className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
@@ -182,6 +195,29 @@ export function CharacterDetail({
         </div>
       </div>
       {reimportError && <p className="text-sm text-red-600 dark:text-red-400">{reimportError}</p>}
+
+      {isGm && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-slate-500 dark:text-slate-400">Владелец:</span>
+          <select
+            value={character.owner_user_id ?? ""}
+            onChange={(e) =>
+              setCharacterOwner(characterId, e.target.value || null).then(() => {
+                invalidateCharacter();
+                queryClient.invalidateQueries({ queryKey: ["characters", campaignId] });
+              })
+            }
+            className="rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
+          >
+            <option value="">— без владельца (NPC) —</option>
+            {membersQuery.data?.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.displayName} {m.role === "gm" ? "(мастер)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <div className="rounded border border-slate-200 p-2 dark:border-slate-700">

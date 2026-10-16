@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
-import type { Campaign, MadnessThresholds } from "@/types/campaign";
+import type { Campaign, CampaignMember, MadnessThresholds } from "@/types/campaign";
 import { DEFAULT_MADNESS_THRESHOLDS } from "@/types/campaign";
 
 function randomInviteCode(): string {
@@ -73,6 +73,23 @@ export async function listAllCampaigns(): Promise<Campaign[]> {
   const { data, error } = await supabase.from("campaigns").select("*").order("created_at", { ascending: false });
   if (error) throw error;
   return data.map(mapCampaign);
+}
+
+export async function listCampaignMembers(campaignId: string): Promise<CampaignMember[]> {
+  const { data, error } = await supabase
+    .from("campaign_members")
+    .select("*")
+    .eq("campaign_id", campaignId)
+    .order("display_name");
+  if (error) throw error;
+  return data.map((row) => ({
+    id: row.id,
+    campaignId: row.campaign_id,
+    userId: row.user_id,
+    role: row.role,
+    displayName: row.display_name,
+    joinedAt: row.joined_at,
+  }));
 }
 
 export async function getCampaign(campaignId: string): Promise<Campaign | null> {

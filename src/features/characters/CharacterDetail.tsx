@@ -264,6 +264,12 @@ export function CharacterDetail({
           <p className="text-slate-400 dark:text-slate-500">КД</p>
           <p>{character.ac}</p>
         </div>
+        {stats && (
+          <div className="rounded border border-slate-200 p-2 dark:border-slate-700">
+            <p className="text-slate-400 dark:text-slate-500">Инициатива</p>
+            <p>{fmtMod(abilityMod(stats.dex))}</p>
+          </div>
+        )}
         <div className="rounded border border-slate-200 p-2 dark:border-slate-700">
           <p className="text-slate-400 dark:text-slate-500">Пас. восприятие</p>
           <p>{passivePerception}</p>

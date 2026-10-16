@@ -5,6 +5,7 @@ import { useActiveCampaign } from "@/features/campaigns/useActiveCampaign";
 import { useAuth } from "@/features/auth/useAuth";
 import { MonsterStatblock } from "./MonsterStatblock";
 import { DndSuMonsterStatblock } from "./DndSuMonsterStatblock";
+import { SteinhartMonsterStatblock } from "./SteinhartMonsterStatblock";
 import { fetchDndSuMonster, type DndSuMonster } from "@/lib/dndSu";
 import {
   getSrdCreature,
@@ -18,6 +19,7 @@ import {
   type BestiaryEntry,
   type SrdCreatureDetail,
   type SrdCreatureSummary,
+  type SteinhartMonster,
 } from "./bestiaryApi";
 
 function MonsterDetailView({ detail }: { detail: SrdCreatureDetail }) {
@@ -135,6 +137,7 @@ function SteinhartSearch({ campaignId, onSaved }: { campaignId: string; onSaved:
   const { user } = useAuth();
   const monstersQuery = useQuery({ queryKey: ["steinhart-monsters"], queryFn: listSteinhartMonsters });
   const [filter, setFilter] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const filtered = (monstersQuery.data ?? []).filter((m) => m.name.toLowerCase().includes(filter.toLowerCase()));
 
@@ -148,21 +151,23 @@ function SteinhartSearch({ campaignId, onSaved }: { campaignId: string; onSaved:
       />
       <div className="flex flex-col gap-1">
         {filtered.map((m) => (
-          <div key={m.id} className="flex items-center justify-between rounded border border-slate-100 px-2 py-1 text-sm dark:border-slate-800">
-            <div>
-              <span>{m.name} </span>
-              <span className="text-xs text-slate-400 dark:text-slate-500">
-                {m.challengeRating ? `ОС ${m.challengeRating}` : ""} {m.creatureType ? `· ${m.creatureType}` : ""}
-                {m.bookPage ? ` · стр. ${m.bookPage}` : ""}
-              </span>
-              {m.summary && <p className="text-xs text-slate-500 dark:text-slate-400">{m.summary}</p>}
+          <div key={m.id} className="flex flex-col gap-1">
+            <div className="flex items-center justify-between rounded border border-slate-100 px-2 py-1 text-sm dark:border-slate-800">
+              <button className="text-left hover:underline" onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}>
+                {m.name}{" "}
+                <span className="text-xs text-slate-400 dark:text-slate-500">
+                  {m.challengeRating ? `ОС ${m.challengeRating}` : ""} {m.creatureType ? `· ${m.creatureType}` : ""}
+                  {m.bookPage ? ` · стр. ${m.bookPage}` : ""}
+                </span>
+              </button>
+              <button
+                className="shrink-0 rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
+                onClick={() => user && saveSteinhartMonsterToBestiary(campaignId, m, user.id).then(onSaved)}
+              >
+                Сохранить
+              </button>
             </div>
-            <button
-              className="shrink-0 rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
-              onClick={() => user && saveSteinhartMonsterToBestiary(campaignId, m, user.id).then(onSaved)}
-            >
-              Сохранить
-            </button>
+            {expandedId === m.id && <SteinhartMonsterStatblock monster={m} />}
           </div>
         ))}
       </div>
@@ -301,7 +306,7 @@ function BestiaryList({
           <div className="flex items-center justify-between rounded border border-slate-100 px-2 py-1 text-sm dark:border-slate-800">
             <button
               className="text-left hover:underline disabled:cursor-default disabled:hover:no-underline"
-              disabled={e.source !== "srd"}
+              disabled={e.source === "custom"}
               onClick={() => setExpandedId(expandedId === e.id ? null : e.id)}
             >
               {e.name} <span className="text-xs text-slate-400 dark:text-slate-500">{e.challengeRating ? `ОС ${e.challengeRating}` : ""} · {SOURCE_LABEL[e.source]}</span>
@@ -313,6 +318,7 @@ function BestiaryList({
             )}
           </div>
           {expandedId === e.id && e.source === "srd" && <MonsterDetailView detail={e.data as SrdCreatureDetail} />}
+          {expandedId === e.id && e.source === "steinhart" && <SteinhartMonsterStatblock monster={e.data as SteinhartMonster} />}
         </div>
       ))}
     </div>

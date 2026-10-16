@@ -60,6 +60,8 @@ export async function getSrdCreature(key: string): Promise<SrdCreatureDetail> {
   return res.json();
 }
 
+export type SteinhartAbility = { name: string; desc: string };
+
 export type SteinhartMonster = {
   id: string;
   name: string;
@@ -67,6 +69,19 @@ export type SteinhartMonster = {
   creatureType: string | null;
   bookPage: number | null;
   summary: string | null;
+  armorClass: string | null;
+  hitPoints: string | null;
+  speed: string | null;
+  abilityScores: Record<string, number> | null;
+  saves: Record<string, string> | null;
+  skills: Record<string, string> | null;
+  senses: string | null;
+  languages: string | null;
+  proficiencyBonus: string | null;
+  experiencePoints: number | null;
+  traits: SteinhartAbility[] | null;
+  actions: SteinhartAbility[] | null;
+  legendaryActions: SteinhartAbility[] | null;
 };
 
 export async function listSteinhartMonsters(): Promise<SteinhartMonster[]> {
@@ -79,6 +94,19 @@ export async function listSteinhartMonsters(): Promise<SteinhartMonster[]> {
     creatureType: row.creature_type,
     bookPage: row.book_page,
     summary: row.summary,
+    armorClass: row.armor_class,
+    hitPoints: row.hit_points,
+    speed: row.speed,
+    abilityScores: row.ability_scores,
+    saves: row.saves,
+    skills: row.skills,
+    senses: row.senses,
+    languages: row.languages,
+    proficiencyBonus: row.proficiency_bonus,
+    experiencePoints: row.experience_points,
+    traits: row.traits,
+    actions: row.actions,
+    legendaryActions: row.legendary_actions,
   }));
 }
 

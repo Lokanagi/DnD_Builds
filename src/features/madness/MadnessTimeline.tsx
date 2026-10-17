@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import type { CharacterSummary } from "@/features/characters/charactersApi";
+import type { Disease } from "./diseasesApi";
 import type { MadnessEvent, MadnessTier } from "./madnessApi";
 
 const TIER_DOT: Record<MadnessTier, string> = {
@@ -13,6 +14,8 @@ const TIER_LABEL: Record<MadnessTier, string> = {
   long: "Долговременное",
   permanent: "Бессрочное",
 };
+
+const DISEASE_DOT = "bg-emerald-500";
 
 const DAY_COL_WIDTH = 28;
 const LABEL_COL_WIDTH = 160;
@@ -40,18 +43,33 @@ function colorForMoon(name: string): string {
 export function MadnessTimeline({
   characters,
   events,
+  diseases,
   currentDay,
   moonPeriods,
   onEventClick,
+  onDiseaseClick,
 }: {
   characters: CharacterSummary[];
   events: MadnessEvent[];
+  diseases: Disease[];
   currentDay: number;
   moonPeriods: MoonPeriod[];
   onEventClick: (event: MadnessEvent) => void;
+  onDiseaseClick: (disease: Disease) => void;
 }) {
-  const earliestDay = Math.min(1, ...events.map((e) => e.campaignDay), ...moonPeriods.map((m) => m.startDay));
-  const latestDay = Math.max(currentDay, ...events.map((e) => e.campaignDay), ...moonPeriods.map((m) => m.endDay), 1);
+  const earliestDay = Math.min(
+    1,
+    ...events.map((e) => e.campaignDay),
+    ...diseases.map((d) => d.campaignDay),
+    ...moonPeriods.map((m) => m.startDay),
+  );
+  const latestDay = Math.max(
+    currentDay,
+    ...events.map((e) => e.campaignDay),
+    ...diseases.map((d) => d.campaignDay),
+    ...moonPeriods.map((m) => m.endDay),
+    1,
+  );
   const dayCount = latestDay - earliestDay + 1;
   const days = Array.from({ length: dayCount }, (_, i) => earliestDay + i);
 
@@ -61,6 +79,13 @@ export function MadnessTimeline({
     const bucket = eventsByCharacterAndDay.get(key) ?? [];
     bucket.push(event);
     eventsByCharacterAndDay.set(key, bucket);
+  }
+  const diseasesByCharacterAndDay = new Map<string, Disease[]>();
+  for (const disease of diseases) {
+    const key = `${disease.characterId}:${disease.campaignDay}`;
+    const bucket = diseasesByCharacterAndDay.get(key) ?? [];
+    bucket.push(disease);
+    diseasesByCharacterAndDay.set(key, bucket);
   }
 
   if (characters.length === 0) {
@@ -122,6 +147,7 @@ export function MadnessTimeline({
           const durationBars = events.filter(
             (e) => e.characterId === character.id && e.tier === "long" && e.durationDays !== null,
           );
+          const diseaseBars = diseases.filter((d) => d.characterId === character.id && d.durationDays !== null);
           return (
             <Fragment key={character.id}>
               <div
@@ -145,23 +171,47 @@ export function MadnessTimeline({
                   />
                 );
               })}
+              {diseaseBars.map((d) => {
+                const endDay = Math.min(d.campaignDay + (d.durationDays as number), latestDay);
+                const colStart = d.campaignDay - earliestDay + 2;
+                const colEnd = endDay - earliestDay + 2 + 1;
+                if (colEnd <= colStart) return null;
+                return (
+                  <div
+                    key={`${d.id}-bar`}
+                    title={`Болезнь «${d.title}»: день ${d.campaignDay} → ${d.campaignDay + (d.durationDays as number)}`}
+                    className={`h-1 self-start justify-self-stretch rounded-full ${d.status === "active" ? "bg-emerald-300 dark:bg-emerald-900" : "bg-emerald-100 dark:bg-emerald-950"}`}
+                    style={{ gridColumn: `${colStart} / ${colEnd}`, gridRow: rowIndex + 3, marginTop: 4 }}
+                  />
+                );
+              })}
               {days.map((day, colIndex) => {
                 const dayEvents = eventsByCharacterAndDay.get(`${character.id}:${day}`);
+                const dayDiseases = diseasesByCharacterAndDay.get(`${character.id}:${day}`);
                 return (
                   <div
                     key={`${character.id}-${day}`}
                     className="relative border-b border-l border-slate-50 dark:border-slate-800"
                     style={{ gridColumn: colIndex + 2, gridRow: rowIndex + 3 }}
                   >
-                    {dayEvents && (
+                    {(dayEvents || dayDiseases) && (
                       <div className="absolute inset-0 flex items-center justify-center gap-0.5">
-                        {dayEvents.map((e) => (
+                        {dayEvents?.map((e) => (
                           <button
                             key={e.id}
                             type="button"
                             title={`${TIER_LABEL[e.tier]}: ${e.title}${e.status !== "active" ? " (разрешено)" : ""}`}
                             onClick={() => onEventClick(e)}
                             className={`h-2.5 w-2.5 rounded-full ring-offset-1 hover:ring-2 hover:ring-slate-400 ${TIER_DOT[e.tier]} ${e.status !== "active" ? "opacity-40" : ""}`}
+                          />
+                        ))}
+                        {dayDiseases?.map((d) => (
+                          <button
+                            key={d.id}
+                            type="button"
+                            title={`Болезнь: ${d.title}${d.status !== "active" ? " (разрешено)" : ""}`}
+                            onClick={() => onDiseaseClick(d)}
+                            className={`h-2.5 w-2.5 rounded-full ring-offset-1 hover:ring-2 hover:ring-slate-400 ${DISEASE_DOT} ${d.status !== "active" ? "opacity-40" : ""}`}
                           />
                         ))}
                       </div>

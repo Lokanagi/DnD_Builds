@@ -13,6 +13,7 @@ const TRACKED_TABLES = [
   "character_resources",
   "conditions",
   "madness_events",
+  "diseases",
   "moon_state",
   "moon_history",
   "xp_ledger",

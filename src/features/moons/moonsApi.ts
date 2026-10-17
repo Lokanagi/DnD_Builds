@@ -31,7 +31,11 @@ export type MoonHistoryEntry = {
 };
 
 // Postgres int4range comes back from PostgREST as a text literal like "[1,21)".
+// An empty range (used for the mundane moon, which should never match a d100
+// roll) canonicalizes to the literal string "empty" on the way out, no
+// matter how it was written — not "[0,0)".
 function parseRange(range: string): { lower: number; upperExclusive: number } {
+  if (range === "empty") return { lower: 0, upperExclusive: 0 };
   const match = /^\[(\d+),(\d+)\)$/.exec(range);
   if (!match) throw new Error(`Не удалось разобрать диапазон d100: ${range}`);
   return { lower: Number(match[1]), upperExclusive: Number(match[2]) };

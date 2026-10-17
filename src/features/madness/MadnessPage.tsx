@@ -18,6 +18,7 @@ import {
   type MadnessTier,
 } from "./madnessApi";
 import { addDisease, computeExpiredDiseases, listDiseases, resolveDisease, type Disease } from "./diseasesApi";
+import { rollMadnessEffect } from "./rollMadnessTable";
 import { MadnessTimeline } from "./MadnessTimeline";
 import { EventDetailModal } from "./EventDetailModal";
 import { DiseaseDetailModal } from "./DiseaseDetailModal";
@@ -79,6 +80,132 @@ const TIER_LABEL: Record<MadnessTier, string> = {
   long: "Долговременное",
   permanent: "Бессрочное",
 };
+
+type RolledPreview = ReturnType<typeof rollMadnessEffect> & { tier: MadnessTier; characterId: string; day: number };
+
+/** One-click "бросок безумия": pick character/day/tier, roll the book's own
+ * two-step d100→d10 table, preview the result, then add it to the timeline
+ * as-is or tweak the day/tier and reroll. The manual AddEventForm below is
+ * untouched for GMs who'd rather type an effect themselves. */
+function MadnessRollPanel({
+  campaignId,
+  currentDay,
+  onAdded,
+}: {
+  campaignId: string;
+  currentDay: number;
+  onAdded: () => void;
+}) {
+  const { user } = useAuth();
+  const charactersQuery = useQuery({
+    queryKey: ["characters", campaignId],
+    queryFn: () => listCharacterSummaries(campaignId),
+  });
+  const [characterId, setCharacterId] = useState("");
+  const [tier, setTier] = useState<MadnessTier>("short");
+  const [day, setDay] = useState(currentDay);
+  const [preview, setPreview] = useState<RolledPreview | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const handleRoll = () => {
+    const rolled = rollMadnessEffect(tier);
+    setPreview({ ...rolled, tier, characterId, day });
+  };
+
+  const handleAdd = async () => {
+    if (!user || !preview || !characterId) return;
+    setBusy(true);
+    try {
+      await addMadnessEvent(
+        campaignId,
+        characterId,
+        preview.tier,
+        preview.title,
+        preview.causeNote,
+        user.id,
+        preview.day,
+        preview.tier === "long" ? rollLongTermDurationDays() : null,
+      );
+      setPreview(null);
+      onAdded();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+      <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300">Бросить безумие по таблице книги</h3>
+      <div className="flex flex-wrap gap-2">
+        <select
+          value={characterId}
+          onChange={(e) => setCharacterId(e.target.value)}
+          className="flex-1 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
+        >
+          <option value="">Персонаж...</option>
+          {charactersQuery.data?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={tier}
+          onChange={(e) => setTier(e.target.value as MadnessTier)}
+          className="rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
+        >
+          <option value="short">Кратковременное</option>
+          <option value="long">Долговременное</option>
+          <option value="permanent">Бессрочное</option>
+        </select>
+        <input
+          type="number"
+          min={1}
+          value={day}
+          onChange={(e) => setDay(Number(e.target.value))}
+          title="День кампании"
+          className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800"
+        />
+        <button
+          type="button"
+          className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white hover:bg-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-slate-300"
+          onClick={handleRoll}
+        >
+          🎲 Бросить
+        </button>
+      </div>
+
+      {tier === "permanent" && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          В таблице бессрочного безумия есть пункты про членовредительство — книга рекомендует заранее согласовать это с игроками за столом.
+        </p>
+      )}
+
+      {preview && (
+        <div className="rounded border border-slate-100 p-3 text-sm dark:border-slate-800">
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            d100={preview.d100}, d10={preview.d10}
+          </p>
+          <p className="font-medium">{preview.title}</p>
+          <p className="text-slate-600 dark:text-slate-300">{preview.causeNote}</p>
+          <div className="mt-2 flex gap-2">
+            <button
+              disabled={busy || !characterId}
+              className="rounded bg-slate-800 px-3 py-1 text-xs text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900"
+              onClick={handleAdd}
+            >
+              Добавить на таймлайн
+            </button>
+            <button type="button" className="rounded border border-slate-300 px-3 py-1 text-xs dark:border-slate-600" onClick={handleRoll}>
+              Перебросить
+            </button>
+          </div>
+          {!characterId && <p className="mt-1 text-xs text-red-500">Выбери персонажа, чтобы добавить.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function EventHistoryRow({
   event,
@@ -601,6 +728,10 @@ export function MadnessPage() {
         onEventClick={setSelectedEvent}
         onDiseaseClick={setSelectedDisease}
       />
+
+      {isGm && (
+        <MadnessRollPanel campaignId={activeCampaignId} currentDay={campaign.currentDay} onAdded={invalidate} />
+      )}
 
       {isGm && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

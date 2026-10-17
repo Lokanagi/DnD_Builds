@@ -8,6 +8,7 @@ export type MoonCatalogEntry = {
   defaultDurationNights: number;
   rangeLower: number;
   rangeUpperExclusive: number;
+  isMundane: boolean;
 };
 
 export type MoonState = {
@@ -49,6 +50,7 @@ export async function getMoonCatalog(): Promise<MoonCatalogEntry[]> {
       defaultDurationNights: row.default_duration_nights,
       rangeLower: lower,
       rangeUpperExclusive: upperExclusive,
+      isMundane: row.is_mundane,
     };
   });
 }
@@ -66,15 +68,6 @@ export async function getMoonState(campaignId: string): Promise<MoonState | null
   };
 }
 
-export async function adjustDuration(campaignId: string, delta: number) {
-  const state = await getMoonState(campaignId);
-  const next = Math.max(0, (state?.remainingDurationNights ?? 0) + delta);
-  const { error } = await supabase
-    .from("moon_state")
-    .upsert({ campaign_id: campaignId, remaining_duration_nights: next }, { onConflict: "campaign_id" });
-  if (error) throw error;
-}
-
 export async function setSummonCounter(campaignId: string, value: number) {
   const clamped = Math.max(0, Math.min(1000, value));
   const { error } = await supabase
@@ -84,8 +77,9 @@ export async function setSummonCounter(campaignId: string, value: number) {
 }
 
 function rollMoonFromCatalog(catalog: MoonCatalogEntry[]): MoonCatalogEntry {
+  const rollable = catalog.filter((m) => !m.isMundane);
   const roll = 1 + Math.floor(Math.random() * 100); // 1..100
-  const moon = catalog.find((m) => roll >= m.rangeLower && roll < m.rangeUpperExclusive);
+  const moon = rollable.find((m) => roll >= m.rangeLower && roll < m.rangeUpperExclusive);
   if (!moon) throw new Error(`Бросок d100=${roll} не попал ни в один диапазон лун`);
   return moon;
 }
@@ -242,15 +236,16 @@ export function generateMoonForecast(
   const events: ForecastEvent[] = [];
   let cycleUsed = new Set<string>();
 
+  const rollableCatalog = catalog.filter((m) => !m.isMundane);
   const pickMoon = (restrictToUnused: boolean): MoonCatalogEntry => {
     for (let attempt = 0; attempt < 50; attempt++) {
       const roll = 1 + Math.floor(Math.random() * 100);
-      const moon = catalog.find((m) => roll >= m.rangeLower && roll < m.rangeUpperExclusive);
+      const moon = rollableCatalog.find((m) => roll >= m.rangeLower && roll < m.rangeUpperExclusive);
       if (!moon) continue;
-      if (restrictToUnused && cycleUsed.has(moon.id) && cycleUsed.size < catalog.length) continue;
+      if (restrictToUnused && cycleUsed.has(moon.id) && cycleUsed.size < rollableCatalog.length) continue;
       return moon;
     }
-    return catalog[0];
+    return rollableCatalog[0];
   };
 
   if (tier.kind === "dormant_only" && dormantMoon) {
@@ -313,7 +308,7 @@ export function generateMoonForecast(
         cycleUsed = new Set();
       } else {
         cycleUsed.add(moon.id);
-        if (cycleUsed.size >= catalog.length) cycleUsed = new Set();
+        if (cycleUsed.size >= rollableCatalog.length) cycleUsed = new Set();
       }
       events.push({ day, moon });
     }
@@ -331,7 +326,7 @@ export function generateMoonForecast(
         cycleUsed = new Set(); // book: Blood Moon resets the rotation
       } else {
         cycleUsed.add(moon.id);
-        if (cycleUsed.size >= catalog.length) cycleUsed = new Set();
+        if (cycleUsed.size >= rollableCatalog.length) cycleUsed = new Set();
       }
       events.push({ day, moon });
     }

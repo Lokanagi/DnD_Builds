@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCampaignStore } from "@/stores/campaignStore";
 import { useActiveCampaign } from "@/features/campaigns/useActiveCampaign";
 import {
-  adjustDuration,
   describeSummonTier,
   generateMoonForecast,
   getMoonCatalog,
@@ -57,26 +56,6 @@ export function MoonsPage() {
             {currentMoon.description && (
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{currentMoon.description}</p>
             )}
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-sm text-slate-600 dark:text-slate-300">Осталось ночей:</span>
-              {isGm && (
-                <button
-                  className="h-6 w-6 rounded border border-slate-300 text-sm hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
-                  onClick={() => adjustDuration(activeCampaignId, -1).then(invalidateAll)}
-                >
-                  −
-                </button>
-              )}
-              <span className="w-8 text-center text-sm font-medium">{stateQuery.data?.remainingDurationNights ?? 0}</span>
-              {isGm && (
-                <button
-                  className="h-6 w-6 rounded border border-slate-300 text-sm hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
-                  onClick={() => adjustDuration(activeCampaignId, 1).then(invalidateAll)}
-                >
-                  +
-                </button>
-              )}
-            </div>
           </>
         ) : (
           <p className="text-sm text-slate-500 dark:text-slate-400">Сейчас не взошла ни одна Потусторонняя луна.</p>
